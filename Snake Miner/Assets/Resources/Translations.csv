@@ -1,0 +1,61 @@
+KEY,en
+ui_music,Music
+ui_language,Language
+ui_yes,Yes
+ui_no,No
+ui_on,On
+ui_off,Off
+ui_resume,Resume
+ui_options,Options
+ui_quit,Quit
+ui_back,Back
+ui_pause,Pause
+ui_unlocked,Unlocked
+ui_locked,Locked
+ui_unlock,Unlock
+ui_currency_amount_format,{0}
+ui_positive_amount_format,+{0}
+ui_positive_percent_format,+{0}%
+ui_negative_percent_format,-{0}%
+ui_percent_format,{0}%
+ui_skill_tree_currently_format,Current: {0}
+ui_skill_tree_current_to_next_format,{0} -> {1}
+ui_skill_tree_node_title_format,{0}\n{1}\nCost: {2}
+ui_skill_tree_island_required_format,Requires level {0}
+ui_skill_tree_locked_for_demo,Locked in demo
+ui_popup_title_end_island_stats,Run Complete
+ui_popup_title_end_island_map,Route
+ui_go_to_next_island,Continue
+PLAYER_MOVE_SPEED_BASE,Move Speed
+PLAYER_MOVE_SPEED_SCALE,Move Speed Multiplier
+PLAYER_MAX_HEALTH_BASE,Max Health
+CURRENCY_GAIN_SCALE,Currency Gain
+STARTING_ABILITY_UNLOCKED,Starting Ability
+SKILL_TREE_DEMO_LOCK_ENABLED,Skill Tree Demo Lock
+ui_wishlist_on_steam,Wishlist on Steam
+ui_reset_save,Reset Save
+ui_close,Close
+ui_popup_title_wishlist,Wishlist
+ui_screen_shake,Screen Shake
+ui_sfx,SFX
+ui_popup_title_options,Options
+on,On
+off,Off
+ui_play,Play
+ui_popup_title_pause,Paused
+ui_exit,Exit
+ui_just_keep_fishing,New Game
+ui_weve_spent_an_unreasonable_amount_of_time_thinking_about_fish_if_you_enjoyed_this_taste_wishlist_just_keep_fishing_on_steam,This starter project is ready for a new gameplay design.
+ui_fish_caught,Items Collected
+ui_money_earned,Currency Earned
+ui_rod_casts,Actions Used
+ui_please_stop_zooming_out,Keep Exploring
+ui_you_happy_theres_nothing_here,Nothing Else Here
+ui_go_fish,Start
+ui_fine_umm_go_wishlist,Wishlist
+ui_no_seriously,Thanks
+ui_bool_option,Toggle
+ui_popup_title_base,Popup
+ui_turtle_pets,Bonus Actions
+ui_penguins_kicked,Special Events
+ui_popup_title_new_fish_type,New Discovery

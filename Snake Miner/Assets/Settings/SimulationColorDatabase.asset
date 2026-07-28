@@ -1,0 +1,339 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 62a4c22a2023413c8b68bb98c158cad5, type: 3}
+  m_Name: SimulationColorDatabase
+  m_EditorClassIdentifier:
+  profiles:
+  - Name: Lavender Pop
+    Harmony: Analogous lavender with a high-energy magenta focal point
+    RingGradient:
+      serializedVersion: 2
+      key0: {r: 0.64, g: 0.5, b: 1, a: 1}
+      key1: {r: 0.77, g: 0.69, b: 1.08, a: 1}
+      key2: {r: 0.9, g: 0.84, b: 1.12, a: 1}
+      key3: {r: 0, g: 0, b: 0, a: 0}
+      key4: {r: 0, g: 0, b: 0, a: 0}
+      key5: {r: 0, g: 0, b: 0, a: 0}
+      key6: {r: 0, g: 0, b: 0, a: 0}
+      key7: {r: 0, g: 0, b: 0, a: 0}
+      ctime0: 0
+      ctime1: 32768
+      ctime2: 65535
+      ctime3: 0
+      ctime4: 0
+      ctime5: 0
+      ctime6: 0
+      ctime7: 0
+      atime0: 0
+      atime1: 65535
+      atime2: 0
+      atime3: 0
+      atime4: 0
+      atime5: 0
+      atime6: 0
+      atime7: 0
+      m_Mode: 0
+      m_ColorSpace: 0
+      m_NumColorKeys: 3
+      m_NumAlphaKeys: 2
+    BallColor: {r: 1.32, g: 0.08, b: 0.62, a: 1}
+    BallGlowColor: {r: 1.32, g: 0.08, b: 0.62, a: 0.42}
+    BallTrailGradient:
+      serializedVersion: 2
+      key0: {r: 1.22, g: 0.42, b: 0.77, a: 1}
+      key1: {r: 1.32, g: 0.08, b: 0.62, a: 1}
+      key2: {r: 0, g: 0, b: 0, a: 0}
+      key3: {r: 0, g: 0, b: 0, a: 0}
+      key4: {r: 0, g: 0, b: 0, a: 0}
+      key5: {r: 0, g: 0, b: 0, a: 0}
+      key6: {r: 0, g: 0, b: 0, a: 0}
+      key7: {r: 0, g: 0, b: 0, a: 0}
+      ctime0: 0
+      ctime1: 65535
+      ctime2: 0
+      ctime3: 0
+      ctime4: 0
+      ctime5: 0
+      ctime6: 0
+      ctime7: 0
+      atime0: 0
+      atime1: 65535
+      atime2: 0
+      atime3: 0
+      atime4: 0
+      atime5: 0
+      atime6: 0
+      atime7: 0
+      m_Mode: 0
+      m_ColorSpace: 0
+      m_NumColorKeys: 2
+      m_NumAlphaKeys: 2
+    CoinColor: {r: 1, g: 0.69, b: 0.08, a: 1}
+    PickupRadiusColor: {r: 1, g: 0.69, b: 0.08, a: 0.32}
+  - Name: Electric Blue Gold
+    Harmony: Complementary blue and gold with a hot-pink accent
+    RingGradient:
+      serializedVersion: 2
+      key0: {r: 1.08, g: 0.82, b: 0.24, a: 1}
+      key1: {r: 0.16, g: 0.52, b: 1.2, a: 1}
+      key2: {r: 0.03, g: 0.16, b: 0.95, a: 1}
+      key3: {r: 0, g: 0, b: 0, a: 0}
+      key4: {r: 0, g: 0, b: 0, a: 0}
+      key5: {r: 0, g: 0, b: 0, a: 0}
+      key6: {r: 0, g: 0, b: 0, a: 0}
+      key7: {r: 0, g: 0, b: 0, a: 0}
+      ctime0: 0
+      ctime1: 32768
+      ctime2: 65535
+      ctime3: 0
+      ctime4: 0
+      ctime5: 0
+      ctime6: 0
+      ctime7: 0
+      atime0: 0
+      atime1: 65535
+      atime2: 0
+      atime3: 0
+      atime4: 0
+      atime5: 0
+      atime6: 0
+      atime7: 0
+      m_Mode: 0
+      m_ColorSpace: 0
+      m_NumColorKeys: 3
+      m_NumAlphaKeys: 2
+    BallColor: {r: 1.4, g: 0.02, b: 0.5, a: 1}
+    BallGlowColor: {r: 1.4, g: 0.02, b: 0.5, a: 0.42}
+    BallTrailGradient:
+      serializedVersion: 2
+      key0: {r: 1.25, g: 0.38, b: 0.7, a: 1}
+      key1: {r: 1.4, g: 0.02, b: 0.5, a: 1}
+      key2: {r: 0, g: 0, b: 0, a: 0}
+      key3: {r: 0, g: 0, b: 0, a: 0}
+      key4: {r: 0, g: 0, b: 0, a: 0}
+      key5: {r: 0, g: 0, b: 0, a: 0}
+      key6: {r: 0, g: 0, b: 0, a: 0}
+      key7: {r: 0, g: 0, b: 0, a: 0}
+      ctime0: 0
+      ctime1: 65535
+      ctime2: 0
+      ctime3: 0
+      ctime4: 0
+      ctime5: 0
+      ctime6: 0
+      ctime7: 0
+      atime0: 0
+      atime1: 65535
+      atime2: 0
+      atime3: 0
+      atime4: 0
+      atime5: 0
+      atime6: 0
+      atime7: 0
+      m_Mode: 0
+      m_ColorSpace: 0
+      m_NumColorKeys: 2
+      m_NumAlphaKeys: 2
+    CoinColor: {r: 1.12, g: 0.64, b: 0.04, a: 1}
+    PickupRadiusColor: {r: 1, g: 0.64, b: 0.04, a: 0.32}
+  - Name: Sunset Sorbet
+    Harmony: Analogous coral and magenta balanced by a complementary cyan ball
+    RingGradient:
+      serializedVersion: 2
+      key0: {r: 1.18, g: 0.18, b: 0.24, a: 1}
+      key1: {r: 1.2, g: 0.52, b: 0.2, a: 1}
+      key2: {r: 0.82, g: 0.12, b: 1.08, a: 1}
+      ctime0: 0
+      ctime1: 32768
+      ctime2: 65535
+      atime0: 0
+      atime1: 65535
+      m_Mode: 0
+      m_ColorSpace: 0
+      m_NumColorKeys: 3
+      m_NumAlphaKeys: 2
+    BallColor: {r: 0.04, g: 1.3, b: 1.18, a: 1}
+    BallGlowColor: {r: 0.04, g: 1.3, b: 1.18, a: 0.44}
+    BallTrailGradient:
+      serializedVersion: 2
+      key0: {r: 0.48, g: 1.22, b: 1.15, a: 1}
+      key1: {r: 0.04, g: 1.3, b: 1.18, a: 1}
+      ctime0: 0
+      ctime1: 65535
+      atime0: 0
+      atime1: 65535
+      m_Mode: 0
+      m_ColorSpace: 0
+      m_NumColorKeys: 2
+      m_NumAlphaKeys: 2
+    CoinColor: {r: 1.2, g: 0.76, b: 0.08, a: 1}
+    PickupRadiusColor: {r: 1, g: 0.7, b: 0.08, a: 0.34}
+  - Name: Tropical Lagoon
+    Harmony: Analogous ocean hues with a complementary coral focal point
+    RingGradient:
+      serializedVersion: 2
+      key0: {r: 0.02, g: 0.3, b: 0.52, a: 1}
+      key1: {r: 0.01, g: 0.82, b: 0.82, a: 1}
+      key2: {r: 0.12, g: 1.12, b: 0.64, a: 1}
+      ctime0: 0
+      ctime1: 32768
+      ctime2: 65535
+      atime0: 0
+      atime1: 65535
+      m_Mode: 0
+      m_ColorSpace: 0
+      m_NumColorKeys: 3
+      m_NumAlphaKeys: 2
+    BallColor: {r: 1.34, g: 0.16, b: 0.1, a: 1}
+    BallGlowColor: {r: 1.34, g: 0.16, b: 0.1, a: 0.45}
+    BallTrailGradient:
+      serializedVersion: 2
+      key0: {r: 1.24, g: 0.48, b: 0.35, a: 1}
+      key1: {r: 1.34, g: 0.16, b: 0.1, a: 1}
+      ctime0: 0
+      ctime1: 65535
+      atime0: 0
+      atime1: 65535
+      m_Mode: 0
+      m_ColorSpace: 0
+      m_NumColorKeys: 2
+      m_NumAlphaKeys: 2
+    CoinColor: {r: 1.18, g: 0.82, b: 0.08, a: 1}
+    PickupRadiusColor: {r: 1, g: 0.76, b: 0.08, a: 0.34}
+  - Name: Neon Grape
+    Harmony: Analogous violet and magenta with a complementary electric-lime ball
+    RingGradient:
+      serializedVersion: 2
+      key0: {r: 0.2, g: 0.04, b: 0.54, a: 1}
+      key1: {r: 0.7, g: 0.1, b: 1.12, a: 1}
+      key2: {r: 1.18, g: 0.1, b: 0.62, a: 1}
+      ctime0: 0
+      ctime1: 32768
+      ctime2: 65535
+      atime0: 0
+      atime1: 65535
+      m_Mode: 0
+      m_ColorSpace: 0
+      m_NumColorKeys: 3
+      m_NumAlphaKeys: 2
+    BallColor: {r: 0.62, g: 1.32, b: 0.04, a: 1}
+    BallGlowColor: {r: 0.62, g: 1.32, b: 0.04, a: 0.44}
+    BallTrailGradient:
+      serializedVersion: 2
+      key0: {r: 0.85, g: 1.22, b: 0.4, a: 1}
+      key1: {r: 0.62, g: 1.32, b: 0.04, a: 1}
+      ctime0: 0
+      ctime1: 65535
+      atime0: 0
+      atime1: 65535
+      m_Mode: 0
+      m_ColorSpace: 0
+      m_NumColorKeys: 2
+      m_NumAlphaKeys: 2
+    CoinColor: {r: 1.18, g: 0.62, b: 0.04, a: 1}
+    PickupRadiusColor: {r: 1, g: 0.58, b: 0.04, a: 0.34}
+  - Name: Sakura Sky
+    Harmony: Soft analogous pinks and periwinkle with a cool aqua accent
+    RingGradient:
+      serializedVersion: 2
+      key0: {r: 1.12, g: 0.3, b: 0.58, a: 1}
+      key1: {r: 0.88, g: 0.56, b: 1.08, a: 1}
+      key2: {r: 0.42, g: 0.62, b: 1.18, a: 1}
+      ctime0: 0
+      ctime1: 32768
+      ctime2: 65535
+      atime0: 0
+      atime1: 65535
+      m_Mode: 0
+      m_ColorSpace: 0
+      m_NumColorKeys: 3
+      m_NumAlphaKeys: 2
+    BallColor: {r: 0.03, g: 1.28, b: 1.08, a: 1}
+    BallGlowColor: {r: 0.03, g: 1.28, b: 1.08, a: 0.44}
+    BallTrailGradient:
+      serializedVersion: 2
+      key0: {r: 0.45, g: 1.2, b: 1.08, a: 1}
+      key1: {r: 0.03, g: 1.28, b: 1.08, a: 1}
+      ctime0: 0
+      ctime1: 65535
+      atime0: 0
+      atime1: 65535
+      m_Mode: 0
+      m_ColorSpace: 0
+      m_NumColorKeys: 2
+      m_NumAlphaKeys: 2
+    CoinColor: {r: 1.16, g: 0.72, b: 0.08, a: 1}
+    PickupRadiusColor: {r: 1, g: 0.68, b: 0.08, a: 0.34}
+  - Name: Ember and Ice
+    Harmony: Warm analogous fire gradient opposed by a complementary electric-blue ball
+    RingGradient:
+      serializedVersion: 2
+      key0: {r: 0.5, g: 0.025, b: 0.02, a: 1}
+      key1: {r: 1.12, g: 0.2, b: 0.025, a: 1}
+      key2: {r: 1.26, g: 0.72, b: 0.06, a: 1}
+      ctime0: 0
+      ctime1: 32768
+      ctime2: 65535
+      atime0: 0
+      atime1: 65535
+      m_Mode: 0
+      m_ColorSpace: 0
+      m_NumColorKeys: 3
+      m_NumAlphaKeys: 2
+    BallColor: {r: 0.04, g: 0.5, b: 1.4, a: 1}
+    BallGlowColor: {r: 0.04, g: 0.5, b: 1.4, a: 0.46}
+    BallTrailGradient:
+      serializedVersion: 2
+      key0: {r: 0.4, g: 0.72, b: 1.28, a: 1}
+      key1: {r: 0.04, g: 0.5, b: 1.4, a: 1}
+      ctime0: 0
+      ctime1: 65535
+      atime0: 0
+      atime1: 65535
+      m_Mode: 0
+      m_ColorSpace: 0
+      m_NumColorKeys: 2
+      m_NumAlphaKeys: 2
+    CoinColor: {r: 1.22, g: 0.9, b: 0.22, a: 1}
+    PickupRadiusColor: {r: 1, g: 0.82, b: 0.18, a: 0.34}
+  - Name: Aurora Mint
+    Harmony: Analogous emerald and mint with a split-complementary violet ball
+    RingGradient:
+      serializedVersion: 2
+      key0: {r: 0.02, g: 0.3, b: 0.28, a: 1}
+      key1: {r: 0.04, g: 0.86, b: 0.52, a: 1}
+      key2: {r: 0.28, g: 1.14, b: 0.82, a: 1}
+      ctime0: 0
+      ctime1: 32768
+      ctime2: 65535
+      atime0: 0
+      atime1: 65535
+      m_Mode: 0
+      m_ColorSpace: 0
+      m_NumColorKeys: 3
+      m_NumAlphaKeys: 2
+    BallColor: {r: 0.9, g: 0.12, b: 1.3, a: 1}
+    BallGlowColor: {r: 0.9, g: 0.12, b: 1.3, a: 0.45}
+    BallTrailGradient:
+      serializedVersion: 2
+      key0: {r: 1.02, g: 0.46, b: 1.2, a: 1}
+      key1: {r: 0.9, g: 0.12, b: 1.3, a: 1}
+      ctime0: 0
+      ctime1: 65535
+      atime0: 0
+      atime1: 65535
+      m_Mode: 0
+      m_ColorSpace: 0
+      m_NumColorKeys: 2
+      m_NumAlphaKeys: 2
+    CoinColor: {r: 1.18, g: 0.68, b: 0.06, a: 1}
+    PickupRadiusColor: {r: 1, g: 0.64, b: 0.06, a: 0.34}

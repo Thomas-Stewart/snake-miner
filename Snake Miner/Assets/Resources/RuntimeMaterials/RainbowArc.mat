@@ -1,0 +1,43 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: RainbowArc
+  m_Shader: {fileID: 4800000, guid: 4f2e9be2bc0c4aa4910a14ff70cdb642, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties:
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs: []
+    m_Ints: []
+    m_Floats:
+    - _BandCount: 2
+    - _StartProgress: 0
+    - _Progress: 1
+    - _Opacity: 1
+    - _EdgeFade: 0.24
+    m_Colors:
+    - _BandColor0: {r: 1, g: 0.86, b: 0.48, a: 0.55}
+    - _BandColor1: {r: 1, g: 0.96, b: 0.78, a: 0.68}
+    - _BandColor2: {r: 1, g: 0.86, b: 0.48, a: 0.55}
+    - _BandColor3: {r: 1, g: 0.86, b: 0.48, a: 0.55}
+    - _BandColor4: {r: 1, g: 0.86, b: 0.48, a: 0.55}
+    - _BandColor5: {r: 1, g: 0.86, b: 0.48, a: 0.55}
+    - _BandColor6: {r: 1, g: 0.86, b: 0.48, a: 0.55}
+    - _BandColor7: {r: 1, g: 0.86, b: 0.48, a: 0.55}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1

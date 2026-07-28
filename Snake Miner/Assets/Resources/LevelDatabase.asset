@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a6a116ab03b1414f8d7d46f90f3168f2, type: 3}
+  m_Name: LevelDatabase
+  m_EditorClassIdentifier: 
+  _levelLandMassPrefabs:
+  - {fileID: 7140376268809270627, guid: 129c2ac2767474a8ea4978643301e336, type: 3}
+  - {fileID: 2907943451951883211, guid: 690c3643b23d342898a7c39458dcf763, type: 3}
+  - {fileID: 8016595099916871359, guid: 5cf15da8c4cb24754b2df96086911bf2, type: 3}
+  - {fileID: 8016595099916871359, guid: d3bafe1da25834c848bf7e57154c8871, type: 3}
+  - {fileID: 8016595099916871359, guid: b8e9c0d3f6a44d07918c2ee5a73d8021, type: 3}
+  - {fileID: 7140376268809270627, guid: f099e57f5dc9c4a368fb3d812a5dbdf1, type: 3}
+  - {fileID: 7140376268809270627, guid: ea2e6b01b3bd848c79169ece7b67748c, type: 3}
+  - {fileID: 7140376268809270627, guid: 8c0e0a7807b1f472baef7f8a963ba1d8, type: 3}
+  - {fileID: 8016595099916871359, guid: d5302c8e8e163489493b4f154cc54d5c, type: 3}
+  - {fileID: 7140376268809270627, guid: 129c2ac2767474a8ea4978643301e336, type: 3}

@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fb2171c8d0974695ac60dcff75ffbb3e, type: 3}
+  m_Name: BaseUpgradeDatabase
+  m_EditorClassIdentifier: 
+  _baseUpgradeData:
+  - UpgradeLevel: 1
+    GridExpansion:
+      x: 3
+      y: 3
+    BaseHealthAddition: 10
+  - UpgradeLevel: 2
+    GridExpansion:
+      x: 3
+      y: 5
+    BaseHealthAddition: 10
+  - UpgradeLevel: 3
+    GridExpansion:
+      x: 5
+      y: 3
+    BaseHealthAddition: 10

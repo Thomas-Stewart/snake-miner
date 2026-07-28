@@ -1,0 +1,48 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 30650655191f54c3ba66195ff5a353cc, type: 3}
+  m_Name: ControlBindingDatabase
+  m_EditorClassIdentifier: 
+  _controlBindingDatas:
+  - ControlType: 1
+    Action: {fileID: -1784478054152860604, guid: a7b414cb87d8a4e38bc85516ce9fab26, type: 3}
+    Symbol: {fileID: 21300000, guid: e632569fa005f40ef9e54d54e95bdc1e, type: 3}
+  - ControlType: 1
+    Action: {fileID: 8470951992028067620, guid: a7b414cb87d8a4e38bc85516ce9fab26, type: 3}
+    Symbol: {fileID: 21300000, guid: 3c6c8c4e9de98496ca44f194dd20face, type: 3}
+  - ControlType: 1
+    Action: {fileID: -1649312292217133793, guid: a7b414cb87d8a4e38bc85516ce9fab26, type: 3}
+    Symbol: {fileID: 21300000, guid: 6bfc38d55444347bb9811753b5958636, type: 3}
+  - ControlType: 0
+    Action: {fileID: -1784478054152860604, guid: a7b414cb87d8a4e38bc85516ce9fab26, type: 3}
+    Symbol: {fileID: 21300000, guid: d734360df36454757bb24986286d0b31, type: 3}
+  - ControlType: 1
+    Action: {fileID: 3387349574550982433, guid: a7b414cb87d8a4e38bc85516ce9fab26, type: 3}
+    Symbol: {fileID: 21300000, guid: bbc5b1f36118c4dce86155962c5505e1, type: 3}
+  - ControlType: 0
+    Action: {fileID: 3387349574550982433, guid: a7b414cb87d8a4e38bc85516ce9fab26, type: 3}
+    Symbol: {fileID: 21300000, guid: 71ef28300bd634756938a027609bbb04, type: 3}
+  - ControlType: 0
+    Action: {fileID: -3969277840930583418, guid: a7b414cb87d8a4e38bc85516ce9fab26, type: 3}
+    Symbol: {fileID: 21300000, guid: 903cc1551195d4531bc7129a8bf8cac5, type: 3}
+  - ControlType: 1
+    Action: {fileID: -3969277840930583418, guid: a7b414cb87d8a4e38bc85516ce9fab26, type: 3}
+    Symbol: {fileID: 21300000, guid: 6bfc38d55444347bb9811753b5958636, type: 3}
+  - ControlType: 0
+    Action: {fileID: -1649312292217133793, guid: a7b414cb87d8a4e38bc85516ce9fab26, type: 3}
+    Symbol: {fileID: 21300000, guid: 87c4527a04bb544c7a72b1ed816ad391, type: 3}
+  - ControlType: 0
+    Action: {fileID: -1901399123519416166, guid: a7b414cb87d8a4e38bc85516ce9fab26, type: 3}
+    Symbol: {fileID: 21300000, guid: 87c4527a04bb544c7a72b1ed816ad391, type: 3}
+  - ControlType: 1
+    Action: {fileID: -1901399123519416166, guid: a7b414cb87d8a4e38bc85516ce9fab26, type: 3}
+    Symbol: {fileID: 21300000, guid: 18cc91296d9a240e8b6a29be412bf11a, type: 3}

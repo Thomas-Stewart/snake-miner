@@ -1,0 +1,41 @@
+{
+  "Base Values": [
+    { "type": "PLAYER_MOVE_SPEED_BASE", "value": 6.0 },
+    { "type": "PLAYER_MOVE_SPEED_SCALE", "value": 0.0 },
+    { "type": "PLAYER_MAX_HEALTH_BASE", "value": 3.0 },
+    { "type": "CURRENCY_GAIN_SCALE", "value": 0.0 },
+    { "type": "STARTING_ABILITY_UNLOCKED", "value": 0.0 },
+    { "type": "SKILL_TREE_DEMO_LOCK_ENABLED", "value": 0.0 }
+  ],
+  "cell_px": 120,
+  "cols": 5,
+  "rows": 3,
+  "start_x": 0,
+  "start_y": 0,
+  "Upgrades": [
+    {
+      "cell": { "x": 0, "y": 0 },
+      "connected_cell": null,
+      "type": "PLAYER_MOVE_SPEED_SCALE",
+      "vars": { "cost": 0, "value": 0.10 }
+    },
+    {
+      "cell": { "x": 1, "y": 0 },
+      "connected_cell": { "x": 0, "y": 0 },
+      "type": "PLAYER_MAX_HEALTH_BASE",
+      "vars": { "cost": 25, "value": 1 }
+    },
+    {
+      "cell": { "x": 2, "y": 0 },
+      "connected_cell": { "x": 1, "y": 0 },
+      "type": "CURRENCY_GAIN_SCALE",
+      "vars": { "cost": 50, "value": 0.15 }
+    },
+    {
+      "cell": { "x": 1, "y": -1 },
+      "connected_cell": { "x": 1, "y": 0 },
+      "type": "STARTING_ABILITY_UNLOCKED",
+      "vars": { "cost": 75, "value": 1 }
+    }
+  ]
+}
