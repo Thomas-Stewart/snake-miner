@@ -14,6 +14,8 @@ namespace DrillSnake
 
         private readonly List<Vector2Int> _segments = new();
         private readonly List<DrillSnakeCargo> _cargo = new();
+        private readonly Queue<Vector2Int> _directionBuffer = new();
+        private bool _cargoBanked;
 
         public DrillSnakeSimulation(DrillSnakeMap map)
         {
@@ -32,6 +34,8 @@ namespace DrillSnake
         public float Heat { get; private set; }
 
         public int CargoCount => _cargo.Count;
+
+        public int QueuedDirectionCount => _directionBuffer.Count;
 
         public int CargoValue
         {
@@ -55,6 +59,8 @@ namespace DrillSnake
         {
             _segments.Clear();
             _cargo.Clear();
+            _directionBuffer.Clear();
+            _cargoBanked = false;
             Heat = 0f;
             Direction = Vector2Int.right;
 
@@ -75,7 +81,33 @@ namespace DrillSnake
             }
 
             Direction = direction;
+            _directionBuffer.Clear();
             return true;
+        }
+
+        public bool QueueDirection(Vector2Int direction)
+        {
+            var comparisonDirection = Direction;
+            foreach (var bufferedDirection in _directionBuffer)
+            {
+                comparisonDirection = bufferedDirection;
+            }
+
+            if (Mathf.Abs(direction.x) + Mathf.Abs(direction.y) != 1 ||
+                direction == comparisonDirection ||
+                direction == -comparisonDirection ||
+                _directionBuffer.Count >= 2)
+            {
+                return false;
+            }
+
+            _directionBuffer.Enqueue(direction);
+            return true;
+        }
+
+        public void ClearDirectionBuffer()
+        {
+            _directionBuffer.Clear();
         }
 
         public DrillSnakeStepResult Step(
@@ -85,6 +117,11 @@ namespace DrillSnake
             bool boosting,
             bool heatFree)
         {
+            if (_directionBuffer.Count > 0)
+            {
+                Direction = _directionBuffer.Dequeue();
+            }
+
             var nextCell = Head + Direction;
             var cellType = Map.GetCell(nextCell);
             var oreType = ToOreType(cellType);
@@ -115,6 +152,7 @@ namespace DrillSnake
             {
                 var value = tuning.GetOreValue(oreType, scannerLevel);
                 _cargo.Add(new DrillSnakeCargo(oreType, value));
+                _cargoBanked = false;
             }
             else
             {
@@ -167,6 +205,24 @@ namespace DrillSnake
 
             _cargo.RemoveAt(_cargo.Count - 1);
             _segments.RemoveAt(_segments.Count - 1);
+            if (_cargo.Count == 0)
+            {
+                _cargoBanked = false;
+            }
+
+            return true;
+        }
+
+        public bool TryMarkCargoBanked(out int payoff)
+        {
+            payoff = 0;
+            if (!IsAtRefinery || _cargo.Count == 0 || _cargoBanked)
+            {
+                return false;
+            }
+
+            payoff = CargoValue;
+            _cargoBanked = true;
             return true;
         }
 

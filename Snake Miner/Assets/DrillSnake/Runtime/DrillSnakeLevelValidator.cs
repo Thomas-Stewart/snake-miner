@@ -85,6 +85,7 @@ namespace DrillSnake
             ValidateMajorChamberRoutes(map, report);
             ValidateRequiredCorridors(map, report);
             ValidateTurningChambers(map, report);
+            ValidateMandatoryDeadEnds(map, report);
             ValidateLoopsAndBedrock(map, report);
             ValidateShortcut(map, report);
             ValidateRoomShape(map, report);
@@ -269,21 +270,37 @@ namespace DrillSnake
                     continue;
                 }
 
-                for (var y = room.Center.y - 1; y <= room.Center.y + 1; y++)
+                var blockedCell = FindBlockedTurningCoreCell(map, room);
+                if (blockedCell.HasValue)
                 {
-                    for (var x = room.Center.x - 1; x <= room.Center.x + 1; x++)
-                    {
-                        var cell = new Vector2Int(x, y);
-                        if (!DrillSnakeMap.IsInitiallyNavigable(map.GetCell(cell)))
-                        {
-                            report.Add(
-                                "TURNING_CORE_BLOCKED",
-                                $"{room.Name} does not retain a clear 3x3 turning core.",
-                                new[] { cell });
-                            y = room.Center.y + 2;
-                            break;
-                        }
-                    }
+                    report.Add(
+                        "TURNING_CORE_BLOCKED",
+                        $"{room.Name} does not retain a clear 3x3 turning core.",
+                        new[] { blockedCell.Value });
+                }
+            }
+        }
+
+        private static void ValidateMandatoryDeadEnds(
+            DrillSnakeMap map,
+            DrillSnakeValidationReport report)
+        {
+            foreach (var room in map.Graph.Rooms)
+            {
+                if (room.Kind == DrillSnakeRoomKind.Refinery ||
+                    CountOpenSafeConnections(map, room) > 1)
+                {
+                    continue;
+                }
+
+                var blockedCell = FindBlockedTurningCoreCell(map, room);
+                if (blockedCell.HasValue)
+                {
+                    report.Add(
+                        "MANDATORY_DEAD_END",
+                        $"{room.Name} is a mandatory raster dead end without a " +
+                        "clear turning core.",
+                        new[] { blockedCell.Value });
                 }
             }
         }
@@ -650,6 +667,61 @@ namespace DrillSnake
         {
             return room.Bounds.width >= room.MinimumTurningSize &&
                    room.Bounds.height >= room.MinimumTurningSize;
+        }
+
+        private static int CountOpenSafeConnections(
+            DrillSnakeMap map,
+            DrillSnakeRoom room)
+        {
+            var openConnections = 0;
+            foreach (var route in map.Graph.GetRoutesForRoom(room.Id))
+            {
+                if (route.Kind == DrillSnakeRouteKind.RiskySoftRockShortcut)
+                {
+                    continue;
+                }
+
+                var open = true;
+                foreach (var cell in route.RasterCells)
+                {
+                    if (room.Bounds.Contains(cell))
+                    {
+                        continue;
+                    }
+
+                    if (!DrillSnakeMap.IsInitiallyNavigable(map.GetCell(cell)))
+                    {
+                        open = false;
+                        break;
+                    }
+                }
+
+                if (open)
+                {
+                    openConnections++;
+                }
+            }
+
+            return openConnections;
+        }
+
+        private static Vector2Int? FindBlockedTurningCoreCell(
+            DrillSnakeMap map,
+            DrillSnakeRoom room)
+        {
+            for (var y = room.Center.y - 1; y <= room.Center.y + 1; y++)
+            {
+                for (var x = room.Center.x - 1; x <= room.Center.x + 1; x++)
+                {
+                    var cell = new Vector2Int(x, y);
+                    if (!DrillSnakeMap.IsInitiallyNavigable(map.GetCell(cell)))
+                    {
+                        return cell;
+                    }
+                }
+            }
+
+            return null;
         }
     }
 }

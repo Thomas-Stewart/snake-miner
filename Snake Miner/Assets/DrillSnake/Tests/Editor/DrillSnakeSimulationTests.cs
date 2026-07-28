@@ -6,6 +6,76 @@ namespace DrillSnake.Tests
     public sealed class DrillSnakeSimulationTests
     {
         [Test]
+        public void LogicalTickAdvancesExactlyOneCellAndBodyFollowsHeadHistory()
+        {
+            var map = DrillSnakeMap.Generate(240628);
+            var simulation = new DrillSnakeSimulation(map);
+            var tuning = new DrillSnakeTuning();
+            var before = CopySegments(simulation);
+            map.SetCell(before[0] + Vector2Int.right, DrillSnakeCellType.OpenFloor);
+
+            var result = simulation.Step(tuning, 0, 0, false, true);
+
+            Assert.That(result.Failed, Is.False);
+            Assert.That(simulation.Head, Is.EqualTo(before[0] + Vector2Int.right));
+            Assert.That(
+                ManhattanDistance(before[0], simulation.Head),
+                Is.EqualTo(1));
+            Assert.That(simulation.Segments.Count, Is.EqualTo(before.Length));
+            for (var index = 1; index < simulation.Segments.Count; index++)
+            {
+                Assert.That(
+                    simulation.Segments[index],
+                    Is.EqualTo(before[index - 1]),
+                    $"segment {index} did not follow its predecessor");
+            }
+        }
+
+        [Test]
+        public void BufferedNinetyDegreeTurnsExecuteOnFollowingLogicalTicks()
+        {
+            var map = DrillSnakeMap.Generate(240628);
+            var simulation = new DrillSnakeSimulation(map);
+            var tuning = new DrillSnakeTuning();
+            var start = simulation.Head;
+            map.SetCell(start + Vector2Int.up, DrillSnakeCellType.OpenFloor);
+            map.SetCell(
+                start + Vector2Int.up + Vector2Int.left,
+                DrillSnakeCellType.OpenFloor);
+
+            Assert.That(simulation.QueueDirection(Vector2Int.up), Is.True);
+            Assert.That(simulation.QueueDirection(Vector2Int.left), Is.True);
+            Assert.That(simulation.Direction, Is.EqualTo(Vector2Int.right));
+            Assert.That(simulation.QueuedDirectionCount, Is.EqualTo(2));
+
+            simulation.Step(tuning, 0, 0, false, true);
+
+            Assert.That(simulation.Head, Is.EqualTo(start + Vector2Int.up));
+            Assert.That(simulation.Direction, Is.EqualTo(Vector2Int.up));
+            Assert.That(simulation.QueuedDirectionCount, Is.EqualTo(1));
+
+            simulation.Step(tuning, 0, 0, false, true);
+
+            Assert.That(
+                simulation.Head,
+                Is.EqualTo(start + Vector2Int.up + Vector2Int.left));
+            Assert.That(simulation.Direction, Is.EqualTo(Vector2Int.left));
+            Assert.That(simulation.QueuedDirectionCount, Is.Zero);
+        }
+
+        [Test]
+        public void ImmediateReverseInputIsRejectedByDirectAndBufferedApis()
+        {
+            var simulation = new DrillSnakeSimulation(
+                DrillSnakeMap.Generate(240628));
+
+            Assert.That(simulation.TrySetDirection(Vector2Int.left), Is.False);
+            Assert.That(simulation.QueueDirection(Vector2Int.left), Is.False);
+            Assert.That(simulation.Direction, Is.EqualTo(Vector2Int.right));
+            Assert.That(simulation.QueuedDirectionCount, Is.Zero);
+        }
+
+        [Test]
         public void GeneratedMapIsDeterministicAndContainsRequiredContent()
         {
             var first = DrillSnakeMap.Generate(
@@ -58,13 +128,12 @@ namespace DrillSnake.Tests
                 DrillSnakeLayoutPreset.MediumCrystalCaverns,
                 DrillSnakeLayoutPreset.HardMagmaFissures
             };
-            var seeds = new[] { 240628, 240629, 4711, 99 };
-
             foreach (var preset in presets)
             {
                 var settings = DrillSnakePresetSettings.For(preset);
-                foreach (var seed in seeds)
+                for (var seedIndex = 0; seedIndex < 50; seedIndex++)
                 {
+                    var seed = 10000 + seedIndex * 7919;
                     var map = DrillSnakeMap.Generate(seed, preset);
 
                     Assert.That(
@@ -192,6 +261,75 @@ namespace DrillSnake.Tests
         }
 
         [Test]
+        public void ValidatorRejectsDisconnectedOreChamber()
+        {
+            var map = DrillSnakeMap.Generate(
+                240628,
+                DrillSnakeLayoutPreset.HardMagmaFissures);
+            var chamber = GetFirstOuterChamber(map);
+            BlockIncidentSafeRoutes(map, chamber, null);
+
+            var report = DrillSnakeLevelValidator.Validate(map);
+
+            Assert.That(report.IsValid, Is.False);
+            Assert.That(HasFailure(report, "NO_TILE_RETURN"), Is.True);
+        }
+
+        [Test]
+        public void ValidatorRejectsMandatoryDeadEndWithoutTurningSpace()
+        {
+            var map = DrillSnakeMap.Generate(
+                240628,
+                DrillSnakeLayoutPreset.HardMagmaFissures);
+            var chamber = GetFirstOuterChamber(map);
+            DrillSnakeRoute retainedRoute = null;
+            foreach (var route in map.Graph.GetRoutesForRoom(chamber.Id))
+            {
+                if (route.Kind != DrillSnakeRouteKind.RiskySoftRockShortcut)
+                {
+                    retainedRoute = route;
+                    break;
+                }
+            }
+
+            Assert.That(retainedRoute, Is.Not.Null);
+            BlockIncidentSafeRoutes(map, chamber, retainedRoute);
+            map.SetCell(chamber.Center, DrillSnakeCellType.Bedrock);
+
+            var report = DrillSnakeLevelValidator.Validate(map);
+
+            Assert.That(report.IsValid, Is.False);
+            Assert.That(HasFailure(report, "MANDATORY_DEAD_END"), Is.True);
+            Assert.That(HasFailure(report, "TURNING_CORE_BLOCKED"), Is.True);
+        }
+
+        [Test]
+        public void LongSnakeDiagnosticReportsEveryRequiredLength()
+        {
+            var map = DrillSnakeMap.Generate(
+                240628,
+                DrillSnakeLayoutPreset.MediumCrystalCaverns);
+            var report = DrillSnakeDesignDiagnostics.Analyze(map);
+            var expectedLengths = new[] { 5, 15, 30, 60 };
+
+            Assert.That(report.LengthReports, Has.Count.EqualTo(expectedLengths.Length));
+            for (var index = 0; index < expectedLengths.Length; index++)
+            {
+                var lengthReport = report.LengthReports[index];
+                Assert.That(
+                    lengthReport.SnakeLength,
+                    Is.EqualTo(expectedLengths[index]));
+                Assert.That(
+                    lengthReport.AccessibleFloorPercentage,
+                    Is.InRange(0f, 100f));
+                Assert.That(lengthReport.ReachableOreChambers, Is.GreaterThan(0));
+                Assert.That(lengthReport.ViableReturnRoutes, Is.GreaterThan(0));
+                Assert.That(lengthReport.MinimumRouteWidth, Is.GreaterThan(0));
+                Assert.That(lengthReport.TurningChambers, Is.GreaterThanOrEqualTo(0));
+            }
+        }
+
+        [Test]
         public void OreTiersGenerallyGetMoreDistantFromRefinery()
         {
             var map = DrillSnakeMap.Generate(240628);
@@ -278,6 +416,50 @@ namespace DrillSnake.Tests
         }
 
         [Test]
+        public void BankingMultipleOreRemovesOnlyCargoAndRetainsPermanentChassis()
+        {
+            var map = DrillSnakeMap.Generate(240628);
+            var simulation = new DrillSnakeSimulation(map);
+            var session = new DrillSnakeSession();
+            var tuning = new DrillSnakeTuning();
+            for (var offset = 1; offset <= 3; offset++)
+            {
+                map.SetCell(
+                    simulation.Head + Vector2Int.right,
+                    DrillSnakeCellType.CommonOre);
+                simulation.Step(tuning, 0, 0, false, true);
+            }
+
+            Assert.That(simulation.CargoCount, Is.EqualTo(3));
+            Assert.That(
+                simulation.Segments.Count,
+                Is.EqualTo(DrillSnakeSimulation.MinimumSegmentCount + 3));
+            MoveEastToDock(simulation, tuning);
+            var payoff = session.BankCargo(simulation);
+            Assert.That(payoff, Is.EqualTo(45));
+            Assert.That(session.BankCargo(simulation), Is.Zero);
+            Assert.That(session.BankedCredits, Is.EqualTo(45));
+
+            var consumed = 0;
+            while (simulation.ConsumeTailCargo())
+            {
+                consumed++;
+            }
+
+            Assert.That(consumed, Is.EqualTo(3));
+            Assert.That(simulation.CargoCount, Is.Zero);
+            Assert.That(
+                simulation.Segments.Count,
+                Is.EqualTo(DrillSnakeSimulation.MinimumSegmentCount));
+            for (var index = 0; index < simulation.Segments.Count; index++)
+            {
+                Assert.That(
+                    simulation.GetSegmentOreType(index),
+                    Is.EqualTo(DrillSnakeOreType.None));
+            }
+        }
+
+        [Test]
         public void DrillingSoftRockChangesItToOpenFloor()
         {
             var map = DrillSnakeMap.Generate(240628);
@@ -294,6 +476,31 @@ namespace DrillSnake.Tests
         }
 
         [Test]
+        public void DrillingOreConvertsItToFloorAndAddsExactlyOneCargoSegment()
+        {
+            var map = DrillSnakeMap.Generate(240628);
+            var simulation = new DrillSnakeSimulation(map);
+            var tuning = new DrillSnakeTuning();
+            var oreCell = simulation.Head + Vector2Int.right;
+            var startingSegments = simulation.Segments.Count;
+            map.SetCell(oreCell, DrillSnakeCellType.RareOre);
+
+            var result = simulation.Step(tuning, 0, 0, false, true);
+
+            Assert.That(result.Outcome, Is.EqualTo(DrillSnakeStepOutcome.CollectedOre));
+            Assert.That(map.GetCell(oreCell), Is.EqualTo(DrillSnakeCellType.OpenFloor));
+            Assert.That(simulation.CargoCount, Is.EqualTo(1));
+            Assert.That(simulation.Segments.Count, Is.EqualTo(startingSegments + 1));
+
+            map.SetCell(
+                simulation.Head + Vector2Int.right,
+                DrillSnakeCellType.OpenFloor);
+            simulation.Step(tuning, 0, 0, false, true);
+            Assert.That(simulation.CargoCount, Is.EqualTo(1));
+            Assert.That(simulation.Segments.Count, Is.EqualTo(startingSegments + 1));
+        }
+
+        [Test]
         public void BedrockCollisionFailsWithoutMovingHead()
         {
             var map = DrillSnakeMap.Generate(240628);
@@ -306,6 +513,43 @@ namespace DrillSnake.Tests
 
             Assert.That(result.Outcome, Is.EqualTo(DrillSnakeStepOutcome.BedrockCollision));
             Assert.That(simulation.Head, Is.EqualTo(originalHead));
+            Assert.That(
+                map.GetCell(originalHead + Vector2Int.right),
+                Is.EqualTo(DrillSnakeCellType.Bedrock));
+        }
+
+        [Test]
+        public void FailedExpeditionDoesNotRemovePreviouslyBankedCredits()
+        {
+            var map = DrillSnakeMap.Generate(240628);
+            var simulation = new DrillSnakeSimulation(map);
+            var session = new DrillSnakeSession();
+            var tuning = new DrillSnakeTuning();
+
+            map.SetCell(
+                simulation.Head + Vector2Int.right,
+                DrillSnakeCellType.CommonOre);
+            simulation.Step(tuning, 0, 0, false, true);
+            MoveEastToDock(simulation, tuning);
+            Assert.That(session.BankCargo(simulation), Is.EqualTo(15));
+            while (simulation.ConsumeTailCargo())
+            {
+            }
+
+            map.SetCell(
+                simulation.Head + Vector2Int.right,
+                DrillSnakeCellType.VeryRareOre);
+            simulation.Step(tuning, 0, 0, false, true);
+            Assert.That(simulation.CargoValue, Is.EqualTo(140));
+            var creditsBeforeFailure = session.BankedCredits;
+
+            session.ResolveFailedExpedition(simulation);
+
+            Assert.That(session.BankedCredits, Is.EqualTo(creditsBeforeFailure));
+            Assert.That(simulation.CargoCount, Is.Zero);
+            Assert.That(
+                simulation.Segments.Count,
+                Is.EqualTo(DrillSnakeSimulation.MinimumSegmentCount));
         }
 
         [Test]
@@ -406,6 +650,75 @@ namespace DrillSnake.Tests
             }
 
             return false;
+        }
+
+        private static Vector2Int[] CopySegments(
+            DrillSnakeSimulation simulation)
+        {
+            var copy = new Vector2Int[simulation.Segments.Count];
+            for (var index = 0; index < simulation.Segments.Count; index++)
+            {
+                copy[index] = simulation.Segments[index];
+            }
+
+            return copy;
+        }
+
+        private static int ManhattanDistance(Vector2Int left, Vector2Int right)
+        {
+            return Mathf.Abs(left.x - right.x) + Mathf.Abs(left.y - right.y);
+        }
+
+        private static DrillSnakeRoom GetFirstOuterChamber(DrillSnakeMap map)
+        {
+            foreach (var room in map.Graph.Rooms)
+            {
+                if (room.MajorOuterRegion)
+                {
+                    return room;
+                }
+            }
+
+            Assert.Fail("Generated graph has no outer chamber.");
+            return null;
+        }
+
+        private static void BlockIncidentSafeRoutes(
+            DrillSnakeMap map,
+            DrillSnakeRoom chamber,
+            DrillSnakeRoute retainedRoute)
+        {
+            foreach (var route in map.Graph.GetRoutesForRoom(chamber.Id))
+            {
+                if (route == retainedRoute ||
+                    route.Kind == DrillSnakeRouteKind.RiskySoftRockShortcut)
+                {
+                    continue;
+                }
+
+                foreach (var cell in route.RasterCells)
+                {
+                    if (!chamber.Bounds.Contains(cell))
+                    {
+                        map.SetCell(cell, DrillSnakeCellType.Bedrock);
+                    }
+                }
+            }
+        }
+
+        private static void MoveEastToDock(
+            DrillSnakeSimulation simulation,
+            DrillSnakeTuning tuning)
+        {
+            var eastDockX =
+                simulation.Map.Center.x + DrillSnakeMap.RefinerySize / 2 + 1;
+            while (simulation.Head.x < eastDockX)
+            {
+                var result = simulation.Step(tuning, 0, 0, false, true);
+                Assert.That(result.Failed, Is.False);
+            }
+
+            Assert.That(simulation.IsAtRefinery, Is.True);
         }
     }
 }

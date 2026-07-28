@@ -1,5 +1,4 @@
 using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
@@ -18,14 +17,13 @@ namespace DrillSnake
             DrillSnakeLayoutPreset.MediumCrystalCaverns;
         [SerializeField] private DrillSnakeTuning tuning = new();
 
-        private readonly Queue<Vector2Int> _directionBuffer = new();
+        private readonly DrillSnakeSession _session = new();
         private readonly int[] _upgradeLevels = new int[4];
 
         private DrillSnakeSimulation _simulation;
         private DrillSnakeWorldView _worldView;
         private DrillSnakeHud _hud;
         private float _nextMoveTime;
-        private int _bankedCredits;
         private bool _expeditionMoving;
         private bool _busy;
         private bool _slowTesting;
@@ -33,7 +31,7 @@ namespace DrillSnake
 
         public DrillSnakeSimulation Simulation => _simulation;
 
-        public int BankedCredits => _bankedCredits;
+        public int BankedCredits => _session.BankedCredits;
 
         private void Awake()
         {
@@ -93,7 +91,6 @@ namespace DrillSnake
             StopAllCoroutines();
             _busy = false;
             _expeditionMoving = false;
-            _directionBuffer.Clear();
             var map = DrillSnakeMap.Generate(seed, layoutPreset);
             levelSeed = map.Seed;
             _simulation = new DrillSnakeSimulation(map);
@@ -114,11 +111,6 @@ namespace DrillSnake
 
         private void MoveOneCell(bool boosting)
         {
-            if (_directionBuffer.Count > 0)
-            {
-                _simulation.TrySetDirection(_directionBuffer.Dequeue());
-            }
-
             var result = _simulation.Step(
                 tuning,
                 GetUpgradeLevel(DrillSnakeUpgradeType.OreScanner),
@@ -165,11 +157,10 @@ namespace DrillSnake
         {
             _busy = true;
             _expeditionMoving = false;
-            _directionBuffer.Clear();
+            _simulation.ClearDirectionBuffer();
 
-            var payoff = _simulation.CargoValue;
+            var payoff = _session.BankCargo(_simulation);
             var segmentCount = _simulation.CargoCount;
-            _bankedCredits += payoff;
             _hud.ShowMessage(
                 $"REFINERY PAYOUT  +{payoff:N0} CREDITS\n" +
                 $"CONSUMING {segmentCount} CARGO SEGMENTS",
@@ -193,7 +184,7 @@ namespace DrillSnake
         {
             _busy = true;
             _expeditionMoving = false;
-            _directionBuffer.Clear();
+            _simulation.ClearDirectionBuffer();
 
             var lostCount = _simulation.CargoCount;
             var lostValue = _simulation.CargoValue;
@@ -210,7 +201,7 @@ namespace DrillSnake
                 2.2f);
 
             yield return new WaitForSeconds(1.15f);
-            _simulation.ResetExpedition();
+            _session.ResolveFailedExpedition(_simulation);
             _worldView.SyncSnake(_simulation, 0f);
             _busy = false;
             _nextMoveTime = Time.time;
@@ -241,29 +232,12 @@ namespace DrillSnake
 
         private void QueueDirection(Vector2Int direction)
         {
-            var comparisonDirection = _directionBuffer.Count > 0
-                ? GetLastBufferedDirection()
-                : _simulation.Direction;
-            if (direction == comparisonDirection ||
-                direction == -comparisonDirection ||
-                _directionBuffer.Count >= 2)
+            if (!_simulation.QueueDirection(direction))
             {
                 return;
             }
 
-            _directionBuffer.Enqueue(direction);
             _expeditionMoving = true;
-        }
-
-        private Vector2Int GetLastBufferedDirection()
-        {
-            var last = _simulation.Direction;
-            foreach (var direction in _directionBuffer)
-            {
-                last = direction;
-            }
-
-            return last;
         }
 
         private void HandleDebugInput(Keyboard keyboard)
@@ -342,16 +316,20 @@ namespace DrillSnake
 
             var level = GetUpgradeLevel(type);
             var cost = tuning.GetUpgradeCost(type, level);
-            if (_bankedCredits < cost)
+            if (_session.BankedCredits < cost)
             {
                 _hud.ShowMessage(
-                    $"NEED {cost - _bankedCredits:N0} MORE CREDITS",
+                    $"NEED {cost - _session.BankedCredits:N0} MORE CREDITS",
                     new Color(1f, 0.55f, 0.25f),
                     1.1f);
                 return;
             }
 
-            _bankedCredits -= cost;
+            if (!_session.TrySpendCredits(cost))
+            {
+                return;
+            }
+
             _upgradeLevels[(int)type]++;
             _hud.ShowMessage(
                 $"{UpgradeDisplayName(type)} UPGRADED TO LV.{level + 1}",
@@ -377,7 +355,7 @@ namespace DrillSnake
             }
 
             _hud.UpdateState(
-                _bankedCredits,
+                _session.BankedCredits,
                 _simulation.CargoCount,
                 _simulation.CargoValue,
                 _simulation.Heat,

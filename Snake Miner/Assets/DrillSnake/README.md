@@ -81,6 +81,8 @@ It checks:
 - every required corridor remains open after rasterization;
 - every turning chamber meets its configured dimensions and keeps a clear 3x3
   core;
+- a raster route that becomes a mandatory dead end still has a clear turning
+  core;
 - Common, Rare, and Very Rare ore meet their preset minimums and increase in
   average graph distance;
 - the safe graph has a cycle and encloses a substantial bedrock island;
@@ -106,6 +108,46 @@ Press **V** to inspect the generated structure:
 This overlay is intentionally generated from the same graph metadata used to
 rasterize and validate the map.
 
+## Long-snake design diagnostic
+
+Run **Tools > Drill Snake > Run Long-Snake Diagnostics** to generate Easy,
+Medium, and Hard maps at seed `240628` and print a Console table for virtual
+snake lengths 5, 15, 30, and 60.
+
+`DrillSnakeDesignDiagnostics` performs bounded best-first pathfinding over the
+room graph, converts each candidate to exact cell-by-cell routes, creates a
+full-length non-overlapping body inside the refinery, and advances that virtual
+body through outbound/return route pairs. A route is rejected when the head
+would enter any occupied body cell. This is a conservative design diagnostic;
+it does not alter the live simulation or generator.
+
+The report contains:
+
+- accessible graph-room and route cells as a percentage of all non-bedrock
+  interior cells;
+- ore chambers with at least one body-safe round trip;
+- distinct viable return graph paths;
+- minimum width among routes used by a viable round trip;
+- chambers with a clear 5x5-or-larger footprint and enough usable cells for the
+  tested body length.
+
+The default-seed report is:
+
+| Preset | Length | Accessible | Ore chambers | Return routes | Min width | Turning chambers |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Easy | 5 | 67.4% | 9 | 72 | 1 | 13 |
+| Easy | 15 | 67.4% | 9 | 72 | 1 | 13 |
+| Easy | 30 | 67.4% | 9 | 72 | 1 | 13 |
+| Easy | 60 | 67.4% | 9 | 66 | 1 | 8 |
+| Medium | 5 | 66.4% | 9 | 72 | 1 | 13 |
+| Medium | 15 | 66.4% | 9 | 72 | 1 | 13 |
+| Medium | 30 | 66.4% | 9 | 72 | 1 | 13 |
+| Medium | 60 | 66.4% | 9 | 66 | 1 | 4 |
+| Hard | 5 | 59.3% | 9 | 23 | 1 | 13 |
+| Hard | 15 | 59.3% | 9 | 23 | 1 | 13 |
+| Hard | 30 | 59.3% | 9 | 23 | 1 | 11 |
+| Hard | 60 | 59.3% | 9 | 22 | 1 | 1 |
+
 ## Runtime architecture
 
 - `DrillSnakeLevelGraph` owns room nodes, route edges, preset values, and graph
@@ -113,7 +155,11 @@ rasterize and validate the map.
 - `DrillSnakeMap` owns the mutable 45x45 tile grid and graph-first rasterizer.
 - `DrillSnakeLevelValidator` gates generated candidates.
 - `DrillSnakeSimulation` owns authoritative positions, cargo, heat, drilling,
-  collision, docking, and expedition reset without scene dependencies.
+  buffered turns, collision, docking, and expedition reset without scene
+  dependencies.
+- `DrillSnakeSession` owns banked credits independently of disposable expedition
+  cargo and prevents the same cargo from being banked twice.
+- `DrillSnakeDesignDiagnostics` is the pure virtual-body pathfinding diagnostic.
 - `DrillSnakeController` reads the Input System and coordinates generation,
   timing, upgrades, banking, and failure sequences.
 - `DrillSnakeWorldView` creates the graybox world and both debug overlays.
@@ -123,6 +169,15 @@ rasterize and validate the map.
 
 Mined terrain survives expedition failure. It is replaced only when a preset,
 seed, or explicit reset generates the level again.
+
+## Edit Mode coverage
+
+`Assets/DrillSnake/Tests/Editor/DrillSnakeSimulationTests.cs` covers single-cell
+ticks, buffered turns, reversal rejection, segment following, ore growth,
+banking and permanent chassis retention, body/bedrock collision, drilling,
+credit persistence, validator fault cases, deterministic content, ore distance,
+heat, and the long-snake report. The generator test validates 50 deterministic
+seeds for each of the three presets (150 generated maps per test run).
 
 ## Gameplay tuning defaults
 
