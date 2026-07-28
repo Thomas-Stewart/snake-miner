@@ -56,18 +56,26 @@ namespace DrillSnake.Editor
                     PrototypeScenePath);
             }
 
-            var map = DrillSnakeMap.Generate(240628);
-            if (map.Width != 45 ||
-                map.Height != 45 ||
-                map.Docks.Count != 4 ||
-                map.Docks.Any(dock =>
-                    map.GetCell(dock) != DrillSnakeCellType.RefineryDock) ||
-                map.CountCells(DrillSnakeCellType.CommonOre) < 20 ||
-                map.CountCells(DrillSnakeCellType.RareOre) < 20 ||
-                map.CountCells(DrillSnakeCellType.VeryRareOre) < 12)
+            var presets = new[]
             {
-                throw new System.InvalidOperationException(
-                    "The deterministic prototype map failed its content validation.");
+                DrillSnakeLayoutPreset.EasyOpenQuarry,
+                DrillSnakeLayoutPreset.MediumCrystalCaverns,
+                DrillSnakeLayoutPreset.HardMagmaFissures
+            };
+            foreach (var preset in presets)
+            {
+                var map = DrillSnakeMap.Generate(240628, preset);
+                if (map.Width != 45 ||
+                    map.Height != 45 ||
+                    map.Docks.Count != 4 ||
+                    map.Docks.Any(dock =>
+                        map.GetCell(dock) != DrillSnakeCellType.RefineryDock) ||
+                    map.ValidationReport == null ||
+                    !map.ValidationReport.IsValid)
+                {
+                    throw new System.InvalidOperationException(
+                        $"{preset} failed graph-first level validation.");
+                }
             }
 
             var buildScene = EditorBuildSettings.scenes.FirstOrDefault(
@@ -79,8 +87,8 @@ namespace DrillSnake.Editor
             }
 
             Debug.Log(
-                "Drill Snake validation passed: scene, build settings, four docks, " +
-                "and all ore tiers are present.");
+                "Drill Snake validation passed: scene, build settings, and all " +
+                "three graph-first presets are valid.");
         }
 
         private static void AddPrototypeToBuildSettings()

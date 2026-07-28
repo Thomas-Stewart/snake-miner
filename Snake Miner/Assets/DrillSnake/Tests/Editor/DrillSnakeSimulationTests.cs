@@ -8,11 +8,20 @@ namespace DrillSnake.Tests
         [Test]
         public void GeneratedMapIsDeterministicAndContainsRequiredContent()
         {
-            var first = DrillSnakeMap.Generate(240628);
-            var second = DrillSnakeMap.Generate(240628);
+            var first = DrillSnakeMap.Generate(
+                240628,
+                DrillSnakeLayoutPreset.MediumCrystalCaverns);
+            var second = DrillSnakeMap.Generate(
+                240628,
+                DrillSnakeLayoutPreset.MediumCrystalCaverns);
 
             Assert.That(first.Width, Is.EqualTo(45));
             Assert.That(first.Height, Is.EqualTo(45));
+            Assert.That(first.Graph.Rooms, Has.Count.EqualTo(13));
+            Assert.That(first.ValidationReport.IsValid, Is.True);
+            Assert.That(
+                first.Preset,
+                Is.EqualTo(DrillSnakeLayoutPreset.MediumCrystalCaverns));
             Assert.That(first.Docks, Has.Count.EqualTo(4));
             foreach (var dock in first.Docks)
             {
@@ -38,6 +47,148 @@ namespace DrillSnake.Tests
                     Assert.That(second.GetCell(cell), Is.EqualTo(first.GetCell(cell)));
                 }
             }
+        }
+
+        [Test]
+        public void EveryPresetProducesValidatedGraphFirstLayoutsAcrossSeeds()
+        {
+            var presets = new[]
+            {
+                DrillSnakeLayoutPreset.EasyOpenQuarry,
+                DrillSnakeLayoutPreset.MediumCrystalCaverns,
+                DrillSnakeLayoutPreset.HardMagmaFissures
+            };
+            var seeds = new[] { 240628, 240629, 4711, 99 };
+
+            foreach (var preset in presets)
+            {
+                var settings = DrillSnakePresetSettings.For(preset);
+                foreach (var seed in seeds)
+                {
+                    var map = DrillSnakeMap.Generate(seed, preset);
+
+                    Assert.That(
+                        map.ValidationReport.IsValid,
+                        Is.True,
+                        $"{settings.DisplayName}, seed {seed}: " +
+                        map.ValidationReport.Summary);
+                    Assert.That(
+                        map.TraversableOrDiggableRatio,
+                        Is.InRange(
+                            settings.MinimumDiggableRatio,
+                            settings.MaximumDiggableRatio));
+                    Assert.That(
+                        map.GenerationAttempt,
+                        Is.InRange(1, DrillSnakeMap.SafeGenerationAttemptLimit));
+                    Assert.That(map.Graph.Rooms, Has.Count.EqualTo(13));
+                    Assert.That(
+                        map.ValidationReport.SafeGraphCycleCount,
+                        Is.GreaterThanOrEqualTo(1));
+                    Assert.That(
+                        map.ValidationReport.LargestEnclosedBedrockMass,
+                        Is.GreaterThanOrEqualTo(12));
+
+                    foreach (var room in map.Graph.Rooms)
+                    {
+                        if (room.MajorOuterRegion)
+                        {
+                            Assert.That(
+                                map.Graph.GetConnectionCount(room.Id),
+                                Is.GreaterThanOrEqualTo(2),
+                                room.Name);
+                        }
+                    }
+                }
+            }
+        }
+
+        [Test]
+        public void RoomsRoutesAndShortcutsSurviveRasterization()
+        {
+            var map = DrillSnakeMap.Generate(
+                240628,
+                DrillSnakeLayoutPreset.HardMagmaFissures);
+            var foundSoftRockShortcut = false;
+
+            foreach (var room in map.Graph.Rooms)
+            {
+                Assert.That(
+                    room.Bounds.width,
+                    Is.GreaterThanOrEqualTo(room.MinimumTurningSize),
+                    room.Name);
+                Assert.That(
+                    room.Bounds.height,
+                    Is.GreaterThanOrEqualTo(room.MinimumTurningSize),
+                    room.Name);
+                if (room.Kind != DrillSnakeRoomKind.Refinery)
+                {
+                    for (var y = room.Center.y - 1; y <= room.Center.y + 1; y++)
+                    {
+                        for (var x = room.Center.x - 1; x <= room.Center.x + 1; x++)
+                        {
+                            Assert.That(
+                                DrillSnakeMap.IsInitiallyNavigable(
+                                    map.GetCell(new Vector2Int(x, y))),
+                                Is.True,
+                                $"{room.Name} turning core");
+                        }
+                    }
+                }
+            }
+
+            foreach (var route in map.Graph.Routes)
+            {
+                Assert.That(route.RasterCells, Is.Not.Empty);
+                foreach (var cell in route.RasterCells)
+                {
+                    if (route.Required)
+                    {
+                        Assert.That(
+                            DrillSnakeMap.IsInitiallyNavigable(map.GetCell(cell)),
+                            Is.True,
+                            $"required route {route.Id} at {cell}");
+                    }
+                    else if (map.GetCell(cell) == DrillSnakeCellType.SoftRock)
+                    {
+                        foundSoftRockShortcut = true;
+                    }
+                }
+            }
+
+            Assert.That(foundSoftRockShortcut, Is.True);
+        }
+
+        [Test]
+        public void ValidatorReportsBlockedDockAndCorridorCells()
+        {
+            var blockedDockMap = DrillSnakeMap.Generate(240628);
+            blockedDockMap.SetCell(
+                blockedDockMap.Docks[0],
+                DrillSnakeCellType.Bedrock);
+            var dockReport = DrillSnakeLevelValidator.Validate(blockedDockMap);
+
+            Assert.That(dockReport.IsValid, Is.False);
+            Assert.That(HasFailure(dockReport, "DOCK_BLOCKED"), Is.True);
+
+            var blockedRouteMap = DrillSnakeMap.Generate(240628);
+            DrillSnakeRoute requiredRoute = null;
+            foreach (var route in blockedRouteMap.Graph.Routes)
+            {
+                if (route.Required)
+                {
+                    requiredRoute = route;
+                    break;
+                }
+            }
+
+            Assert.That(requiredRoute, Is.Not.Null);
+            var blockedCell = requiredRoute.RasterCells[
+                requiredRoute.RasterCells.Count / 2];
+            blockedRouteMap.SetCell(blockedCell, DrillSnakeCellType.Bedrock);
+            var routeReport = DrillSnakeLevelValidator.Validate(blockedRouteMap);
+
+            Assert.That(routeReport.IsValid, Is.False);
+            Assert.That(HasFailure(routeReport, "CORRIDOR_BLOCKED"), Is.True);
         }
 
         [Test]
@@ -240,6 +391,21 @@ namespace DrillSnake.Tests
 
             Assert.That(count, Is.GreaterThan(0));
             return total / count;
+        }
+
+        private static bool HasFailure(
+            DrillSnakeValidationReport report,
+            string code)
+        {
+            foreach (var failure in report.Failures)
+            {
+                if (failure.Code == code)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }

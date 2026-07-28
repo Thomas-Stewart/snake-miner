@@ -1,50 +1,155 @@
 # Drill Snake Prototype
 
 Open `Assets/DrillSnake/Scenes/DrillSnakePrototype.unity` and enter Play Mode.
-The scene contains one runtime bootstrap component; it generates the entire map,
-camera, lighting, snake, UI, upgrade buttons, and debug presentation without any
-manual reference assignment.
+The scene has one runtime component; it creates the level, camera, lighting,
+snake, UI, upgrade panel, and debug overlays without manual references.
+
+The prototype uses discrete, authoritative grid movement. A turn changes heading
+at the center of a cell, immediate 180-degree reversals are rejected, and the
+snake body occupies exact cells. There is no continuous steering or movement
+noise.
 
 ## Controls
 
 - **WASD / Arrow keys**: start moving and buffer 90-degree turns
 - **Space**: boost while held (faster movement, extra heat)
-- **R**: regenerate the deterministic layout with the next seed
+- **F1**: generate Easy — Open Quarry with the active requested seed
+- **F2**: generate Medium — Crystal Caverns with the active requested seed
+- **F3**: generate Hard — Magma Fissures with the active requested seed
+- **N**: generate a new requested seed with the active preset
+- **R**: reset the active requested seed and discard mined terrain
+- **V**: toggle the level-design and validation overlay
+- **G**: toggle the cell-grid overlay
 - **1 / 2**: slow test movement / restore normal movement
-- **G**: toggle the visible grid overlay
 - **H**: toggle heat-free testing
 
-The snake waits at the refinery until a direction or Space is pressed. Immediate
-180-degree reversals are rejected. Reach any cyan refinery dock with cargo to bank
-it, animate the cargo train away, reset heat, and stop at the refinery. The four
-upgrade buttons are only visible while the drill head is on refinery floor or a
-dock. Credits and upgrades persist for the duration of Play Mode.
+The snake waits at the refinery until a direction or Space is pressed. Reach any
+cyan refinery dock with cargo to bank it, consume the temporary cargo segments,
+reset heat, and stop at the refinery. Credits and upgrades persist during Play
+Mode.
 
-## Architecture
+## Graph-first generation
 
-- `DrillSnakeMap` owns the mutable 45x45 cell grid and deliberate seeded layout.
-- `DrillSnakeSimulation` owns authoritative grid positions, cargo, heat, movement,
-  drilling, collision, and expedition reset. It has no scene or rendering
-  dependencies and is covered by Editor tests.
-- `DrillSnakeController` reads the Input System, applies timing and upgrades, and
-  coordinates banking/failure sequences.
-- `DrillSnakeWorldView` smoothly interpolates authoritative cell-to-cell movement
-  and generates all URP-compatible graybox visuals from Unity primitives.
-- `DrillSnakeHud` generates runtime UI and the refinery upgrade panel.
-- `DrillSnakeSceneBuilder` is available at
-  **Tools > Drill Snake > Build Prototype Scene**.
+Generation is deterministic for a requested seed and preset:
 
-Mined terrain lives in `DrillSnakeMap`, so it survives expedition failure.
-Pressing R intentionally replaces the current map with the next deterministic
-seed.
+1. Build a room-and-route graph with the refinery as node 0.
+2. Rasterize 5x5–9x9 turning chambers and orthogonal 1–3-cell-wide routes.
+3. Keep required routes open. Rasterize optional short routes as destructible
+   soft rock.
+4. Fill unused cells with large bedrock masses or graph-proximity soft-rock
+   buffers. Partial distance bands are filled in rotational groups, not by random
+   tile scatter.
+5. Compute shortest safe graph distance from the refinery.
+6. Place structured ore rings in rooms after the topology is valid. Ore tier is
+   selected from graph distance.
+7. Run full validation. Reject a failing candidate and deterministically derive
+   another seed, up to 12 attempts.
 
-## Tuning
+The graph has 13 named nodes: one central refinery, four transfer chambers, and
+eight outer mining chambers. Four refinery spokes feed the transfer chambers.
+The eight outer chambers form a safe loop, so each has two return directions.
+Easy and Medium also have an inner safe loop. Four optional soft-rock diagonals
+provide shorter, riskier commitments. Seed variation is bounded to room sizes,
+orthogonal bend choice, lane-width phase, and ore-ring phase; it never places
+arbitrary isolated tiles.
 
-Select the `Drill Snake Runtime` object in the prototype scene. All movement,
-drilling, heat, ore values, banking speed, and upgrade costs are grouped in its
-serialized **Tuning** field (`DrillSnakeTuning`). The initial seed is on the same
-component.
+### Layout preset tuning
 
-The default values make body length the primary risk: heat rises slowly on normal
-floor, rises sharply while drilling, receives a small per-cargo surcharge, and
-receives a larger boost surcharge.
+| Preset | Diggable target | Inner rooms | Outer rooms | Spokes | Outer loop | Secondary | Inner loop | Ore per room C/R/VR |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: |
+| Easy — Open Quarry | 62–69% | 7–9 | 7–9 | 3 | 3 | 2 | Yes | 6 / 7 / 5 |
+| Medium — Crystal Caverns | 50–56% | 6–7 | 6–8 | 2 | 2 | 1 | Yes | 5 / 6 / 5 |
+| Hard — Magma Fissures | 40–46% | 5–6 | 5–6 | 1 | 1 | 1 | No | 4 / 5 / 6 |
+
+The map is 45x45 with a central 9x9 refinery. The minimum ore validation counts
+are three times each preset's per-room figure. Graph-distance tier thresholds are
+40% of maximum distance for Common and 72% for Rare; farther rooms are Very Rare.
+The non-refinery turning core is always at least 3x3. The validator requires at
+least 20% bedrock, rejects more than 62% initially open floor, allows at most 20%
+graph dead ends, and requires an enclosed bedrock component of at least 12 cells.
+
+## Validation
+
+`DrillSnakeLevelValidator` runs once before ore placement and again afterward.
+It checks:
+
+- all four docks connect to open graph routes;
+- every major outer chamber has safe graph and raster routes to a dock, with two
+  independent safe first-edge return choices;
+- each outer region has at least two graph connections, except an explicitly
+  marked ore pocket with a valid turning chamber;
+- every required corridor remains open after rasterization;
+- every turning chamber meets its configured dimensions and keeps a clear 3x3
+  core;
+- Common, Rare, and Very Rare ore meet their preset minimums and increase in
+  average graph distance;
+- the safe graph has a cycle and encloses a substantial bedrock island;
+- at least one optional shortcut still contains soft rock;
+- the map is neither one giant open room nor primarily dead ends.
+
+The HUD shows requested and accepted seeds, generation attempt, validation
+summary, and the number of findings from rejected candidates.
+
+## Level-design overlay
+
+Press **V** to inspect the generated structure:
+
+- spheres are room graph nodes;
+- colored room outlines are turning chambers and ore-value zones;
+- labels show room ID, dimensions, graph distance, and distance tier;
+- white lines are central required routes;
+- cyan lines are safe long routes;
+- orange lines are risky soft-rock shortcuts;
+- green, blue, and magenta room outlines are Common, Rare, and Very Rare zones;
+- bright red cell markers are validation failures.
+
+This overlay is intentionally generated from the same graph metadata used to
+rasterize and validate the map.
+
+## Runtime architecture
+
+- `DrillSnakeLevelGraph` owns room nodes, route edges, preset values, and graph
+  metadata.
+- `DrillSnakeMap` owns the mutable 45x45 tile grid and graph-first rasterizer.
+- `DrillSnakeLevelValidator` gates generated candidates.
+- `DrillSnakeSimulation` owns authoritative positions, cargo, heat, drilling,
+  collision, docking, and expedition reset without scene dependencies.
+- `DrillSnakeController` reads the Input System and coordinates generation,
+  timing, upgrades, banking, and failure sequences.
+- `DrillSnakeWorldView` creates the graybox world and both debug overlays.
+- `DrillSnakeHud` creates runtime UI and the refinery upgrade panel.
+- `DrillSnakeSceneBuilder` is available at **Tools > Drill Snake > Build
+  Prototype Scene**.
+
+Mined terrain survives expedition failure. It is replaced only when a preset,
+seed, or explicit reset generates the level again.
+
+## Gameplay tuning defaults
+
+Select `Drill Snake Runtime` in the scene. The initial seed, layout preset, and
+the following serialized `DrillSnakeTuning` values are editable:
+
+| Group | Parameter | Default | Effect |
+| --- | --- | ---: | --- |
+| Movement | Movement tick | 0.200 s | Normal cell interval |
+| Movement | Boost tick | 0.105 s | Boosted cell interval cap |
+| Movement | Slow-test multiplier | 3.0x | Debug slowdown |
+| Movement | Speed upgrade reduction | 0.018 s/level | Normal interval reduction; 0.07 s floor |
+| Movement | Drill delay | 0.150 s | Extra delay for destructible cells |
+| Movement | Drill upgrade reduction | 18%/level | Multiplicative drill-delay reduction |
+| Movement | Bank segment time | 0.090 s | Tail-consumption animation per cargo |
+| Heat | Base maximum | 100 | Failure threshold |
+| Heat | Cooling capacity | +18/level | Maximum-heat increase |
+| Heat | Movement heat | 0.55/cell | Base heat per move |
+| Heat | Drilling heat | 4.5/cell | Additional destructible-cell heat |
+| Heat | Cargo heat | 0.055/segment/cell | Long-body heat surcharge |
+| Heat | Boost heat | 1.8/cell | Additional boost heat |
+| Ore | Common value | 15 CR | Base cargo value |
+| Ore | Rare value | 50 CR | Base cargo value |
+| Ore | Very Rare value | 140 CR | Base cargo value |
+| Ore | Scanner bonus | +15%/level | Multiplicative ore-value bonus |
+| Upgrades | Cooling base cost | 100 CR | Level-0 purchase cost |
+| Upgrades | Drill Motor base cost | 130 CR | Level-0 purchase cost |
+| Upgrades | Drive Speed base cost | 160 CR | Level-0 purchase cost |
+| Upgrades | Ore Scanner base cost | 140 CR | Level-0 purchase cost |
+| Upgrades | Cost growth | 1.75x/level | Multiplicative cost curve |

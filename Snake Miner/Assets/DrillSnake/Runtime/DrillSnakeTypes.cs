@@ -3,6 +3,34 @@ using UnityEngine;
 
 namespace DrillSnake
 {
+    public enum DrillSnakeLayoutPreset
+    {
+        EasyOpenQuarry,
+        MediumCrystalCaverns,
+        HardMagmaFissures
+    }
+
+    public enum DrillSnakeRoomKind
+    {
+        Refinery,
+        OreChamber
+    }
+
+    public enum DrillSnakeRouteKind
+    {
+        Standard,
+        SafeLongRoute,
+        RiskySoftRockShortcut
+    }
+
+    public enum DrillSnakeDistanceTier
+    {
+        Refinery,
+        Common,
+        Rare,
+        VeryRare
+    }
+
     public enum DrillSnakeCellType
     {
         OpenFloor,

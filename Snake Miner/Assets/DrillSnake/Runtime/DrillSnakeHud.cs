@@ -50,10 +50,16 @@ namespace DrillSnake
             int cargoValue,
             float heat,
             float maximumHeat,
-            int seed,
+            int requestedSeed,
+            int acceptedSeed,
+            string presetName,
+            int generationAttempt,
+            DrillSnakeValidationReport validationReport,
+            int rejectedFailureCount,
             bool slowTesting,
             bool heatFree,
             bool gridVisible,
+            bool levelDesignOverlayVisible,
             bool atRefinery,
             bool waitingToDepart,
             Func<DrillSnakeUpgradeType, int> getUpgradeLevel,
@@ -63,7 +69,9 @@ namespace DrillSnake
                 $"BANKED CREDITS  <color=#55F1E4>{bankedCredits:N0}</color>\n" +
                 $"CARGO SEGMENTS  <color=#FFE474>{cargoCount}</color>\n" +
                 $"CARGO VALUE     <color=#FFE474>{cargoValue:N0}</color>\n" +
-                $"LEVEL SEED      <color=#B9C9D6>{seed}</color>";
+                $"LAYOUT          <color=#B9C9D6>{presetName}</color>\n" +
+                $"REQUESTED SEED  <color=#B9C9D6>{requestedSeed}</color>\n" +
+                $"ACCEPTED / TRY  <color=#B9C9D6>{acceptedSeed} / {generationAttempt}</color>";
 
             var debugFlags = string.Empty;
             if (slowTesting)
@@ -81,14 +89,37 @@ namespace DrillSnake
                 debugFlags += "\n<color=#55F1E4>GRID VISIBLE</color>";
             }
 
+            if (levelDesignOverlayVisible)
+            {
+                debugFlags +=
+                    "\n<color=#55F1E4>VALIDATION OVERLAY</color>" +
+                    "\n<color=#67FF73>GREEN</color> common  " +
+                    "<color=#4A9FFF>BLUE</color> rare  " +
+                    "<color=#FF3BEA>MAGENTA</color> very rare" +
+                    "\n<color=#24DFFF>CYAN</color> safe long  " +
+                    "<color=#FF761B>ORANGE</color> risky short";
+            }
+
+            var validationText = validationReport == null
+                ? "VALIDATION PENDING"
+                : validationReport.Summary;
+            if (rejectedFailureCount > 0)
+            {
+                validationText += $"  •  {rejectedFailureCount} REJECTED FINDING(S)";
+            }
+
             _debugText.text =
                 "<b>CONTROLS</b>\n" +
                 "WASD / ARROWS  Turn\n" +
                 "SPACE          Boost\n" +
-                "R              Regenerate\n" +
+                "F1 / F2 / F3  Easy / Medium / Hard\n" +
+                "N              New seed\n" +
+                "R              Reset active seed\n" +
+                "V              Validation overlay\n" +
                 "1 / 2          Slow / Normal\n" +
                 "G              Grid overlay\n" +
-                "H              Heat-free mode" +
+                "H              Heat-free mode\n" +
+                $"<color=#86A4B4>{validationText}</color>" +
                 debugFlags;
 
             var heatNormalized = maximumHeat <= 0f ? 0f : Mathf.Clamp01(heat / maximumHeat);
@@ -174,7 +205,7 @@ namespace DrillSnake
                 new Vector2(0f, 1f),
                 new Vector2(0f, 1f),
                 new Vector2(22f, -22f),
-                new Vector2(340f, 174f),
+                new Vector2(470f, 240f),
                 new Vector2(0f, 1f));
 
             _statsText = CreateText(
@@ -199,7 +230,7 @@ namespace DrillSnake
                 new Vector2(1f, 1f),
                 new Vector2(1f, 1f),
                 new Vector2(-22f, -22f),
-                new Vector2(330f, 235f),
+                new Vector2(490f, 385f),
                 new Vector2(1f, 1f));
 
             _debugText = CreateText(

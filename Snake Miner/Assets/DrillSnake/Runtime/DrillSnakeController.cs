@@ -13,6 +13,9 @@ namespace DrillSnake
     {
         [Header("Prototype")]
         [SerializeField] private int levelSeed = 240628;
+        [SerializeField]
+        private DrillSnakeLayoutPreset layoutPreset =
+            DrillSnakeLayoutPreset.MediumCrystalCaverns;
         [SerializeField] private DrillSnakeTuning tuning = new();
 
         private readonly Queue<Vector2Int> _directionBuffer = new();
@@ -91,9 +94,8 @@ namespace DrillSnake
             _busy = false;
             _expeditionMoving = false;
             _directionBuffer.Clear();
-            levelSeed = seed;
-
-            var map = DrillSnakeMap.Generate(levelSeed);
+            var map = DrillSnakeMap.Generate(seed, layoutPreset);
+            levelSeed = map.Seed;
             _simulation = new DrillSnakeSimulation(map);
             _worldView.BuildWorld(map);
             _worldView.SyncSnake(_simulation, 0f);
@@ -102,9 +104,11 @@ namespace DrillSnake
             if (announce)
             {
                 _hud.ShowMessage(
-                    $"LEVEL REGENERATED  •  SEED {levelSeed}",
+                    $"{map.Settings.DisplayName}\n" +
+                    $"REQUESTED {map.RequestedSeed}  •  ACCEPTED {map.Seed}  •  " +
+                    $"TRY {map.GenerationAttempt}",
                     new Color(0.35f, 0.95f, 0.88f),
-                    1.6f);
+                    2f);
             }
         }
 
@@ -264,9 +268,34 @@ namespace DrillSnake
 
         private void HandleDebugInput(Keyboard keyboard)
         {
+            if (keyboard.f1Key.wasPressedThisFrame)
+            {
+                SelectPreset(DrillSnakeLayoutPreset.EasyOpenQuarry);
+            }
+
+            if (keyboard.f2Key.wasPressedThisFrame)
+            {
+                SelectPreset(DrillSnakeLayoutPreset.MediumCrystalCaverns);
+            }
+
+            if (keyboard.f3Key.wasPressedThisFrame)
+            {
+                SelectPreset(DrillSnakeLayoutPreset.HardMagmaFissures);
+            }
+
             if (keyboard.rKey.wasPressedThisFrame)
             {
-                GenerateLevel(levelSeed + 1, true);
+                GenerateLevel(_simulation.Map.RequestedSeed, true);
+            }
+
+            if (keyboard.nKey.wasPressedThisFrame)
+            {
+                GenerateLevel(unchecked(_simulation.Map.RequestedSeed + 1), true);
+            }
+
+            if (keyboard.vKey.wasPressedThisFrame)
+            {
+                _worldView.ToggleLevelDesignOverlay();
             }
 
             if (keyboard.digit1Key.wasPressedThisFrame)
@@ -296,6 +325,12 @@ namespace DrillSnake
                         : new Color(1f, 0.7f, 0.25f),
                     1.2f);
             }
+        }
+
+        private void SelectPreset(DrillSnakeLayoutPreset preset)
+        {
+            layoutPreset = preset;
+            GenerateLevel(_simulation.Map.RequestedSeed, true);
         }
 
         private void TryPurchaseUpgrade(DrillSnakeUpgradeType type)
@@ -347,10 +382,16 @@ namespace DrillSnake
                 _simulation.CargoValue,
                 _simulation.Heat,
                 tuning.GetMaximumHeat(GetUpgradeLevel(DrillSnakeUpgradeType.Cooling)),
+                _simulation.Map.RequestedSeed,
                 levelSeed,
+                _simulation.Map.Settings.DisplayName,
+                _simulation.Map.GenerationAttempt,
+                _simulation.Map.ValidationReport,
+                _simulation.Map.RejectedFailures.Count,
                 _slowTesting,
                 _heatFree,
                 _worldView.GridVisible,
+                _worldView.LevelDesignOverlayVisible,
                 _simulation.IsAtRefinery,
                 !_expeditionMoving && !_busy,
                 GetUpgradeLevel,

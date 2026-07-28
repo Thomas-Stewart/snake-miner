@@ -28,6 +28,9 @@ namespace DrillSnake
         private DrillSnakeMap _map;
         private Transform _worldRoot;
         private GameObject _gridOverlay;
+        private GameObject _levelDesignOverlay;
+        private bool _gridVisible;
+        private bool _levelDesignOverlayVisible;
         private Material _floorMaterial;
         private Material _softRockMaterial;
         private Material _bedrockMaterial;
@@ -38,8 +41,18 @@ namespace DrillSnake
         private Material _trackMaterial;
         private Material _cargoFrameMaterial;
         private Material _gridMaterial;
+        private Material _standardRouteMaterial;
+        private Material _safeRouteMaterial;
+        private Material _riskyRouteMaterial;
+        private Material _refineryNodeMaterial;
+        private Material _commonZoneMaterial;
+        private Material _rareZoneMaterial;
+        private Material _veryRareZoneMaterial;
+        private Material _validationFailureMaterial;
 
-        public bool GridVisible => _gridOverlay != null && _gridOverlay.activeSelf;
+        public bool GridVisible => _gridVisible;
+
+        public bool LevelDesignOverlayVisible => _levelDesignOverlayVisible;
 
         public void BuildWorld(DrillSnakeMap map)
         {
@@ -67,10 +80,12 @@ namespace DrillSnake
             }
 
             CreateGridOverlay();
+            CreateLevelDesignOverlay();
         }
 
         public void SetGridVisible(bool visible)
         {
+            _gridVisible = visible;
             if (_gridOverlay != null)
             {
                 _gridOverlay.SetActive(visible);
@@ -80,6 +95,20 @@ namespace DrillSnake
         public void ToggleGrid()
         {
             SetGridVisible(!GridVisible);
+        }
+
+        public void SetLevelDesignOverlayVisible(bool visible)
+        {
+            _levelDesignOverlayVisible = visible;
+            if (_levelDesignOverlay != null)
+            {
+                _levelDesignOverlay.SetActive(visible);
+            }
+        }
+
+        public void ToggleLevelDesignOverlay()
+        {
+            SetLevelDesignOverlayVisible(!LevelDesignOverlayVisible);
         }
 
         public void RemoveDrilledCell(Vector2Int cell)
@@ -291,6 +320,54 @@ namespace DrillSnake
                 0f,
                 0f,
                 new Color(0.025f, 0.18f, 0.2f));
+            _standardRouteMaterial = CreateMaterial(
+                "Standard Graph Route",
+                new Color(0.82f, 0.9f, 0.94f),
+                0f,
+                0f,
+                new Color(0.25f, 0.32f, 0.35f));
+            _safeRouteMaterial = CreateMaterial(
+                "Safe Long Route",
+                new Color(0.1f, 0.88f, 1f),
+                0f,
+                0f,
+                new Color(0.02f, 0.48f, 0.7f));
+            _riskyRouteMaterial = CreateMaterial(
+                "Risky Short Route",
+                new Color(1f, 0.42f, 0.08f),
+                0f,
+                0f,
+                new Color(0.65f, 0.12f, 0.01f));
+            _refineryNodeMaterial = CreateMaterial(
+                "Refinery Graph Node",
+                new Color(0.2f, 1f, 0.9f),
+                0.2f,
+                0.1f,
+                new Color(0.05f, 0.55f, 0.5f));
+            _commonZoneMaterial = CreateMaterial(
+                "Common Ore Zone",
+                new Color(0.3f, 1f, 0.32f),
+                0f,
+                0f,
+                new Color(0.06f, 0.38f, 0.04f));
+            _rareZoneMaterial = CreateMaterial(
+                "Rare Ore Zone",
+                new Color(0.18f, 0.6f, 1f),
+                0f,
+                0f,
+                new Color(0.02f, 0.2f, 0.65f));
+            _veryRareZoneMaterial = CreateMaterial(
+                "Very Rare Ore Zone",
+                new Color(1f, 0.22f, 0.9f),
+                0f,
+                0f,
+                new Color(0.5f, 0.03f, 0.42f));
+            _validationFailureMaterial = CreateMaterial(
+                "Validation Failure",
+                new Color(1f, 0.05f, 0.04f),
+                0f,
+                0f,
+                new Color(0.8f, 0.01f, 0.01f));
 
             _oreMaterials[DrillSnakeOreType.Common] = CreateMaterial(
                 "Common Ore",
@@ -446,7 +523,7 @@ namespace DrillSnake
                     new Vector3(maximum, lineHeight, offset));
             }
 
-            _gridOverlay.SetActive(false);
+            _gridOverlay.SetActive(_gridVisible);
         }
 
         private void CreateGridLine(Vector3 start, Vector3 end)
@@ -462,6 +539,160 @@ namespace DrillSnake
             line.numCapVertices = 0;
             line.SetPosition(0, start);
             line.SetPosition(1, end);
+        }
+
+        private void CreateLevelDesignOverlay()
+        {
+            _levelDesignOverlay = new GameObject("Level Design Validation Overlay");
+            _levelDesignOverlay.transform.SetParent(_worldRoot, false);
+
+            foreach (var route in _map.Graph.Routes)
+            {
+                CreateRouteOverlay(route);
+            }
+
+            foreach (var room in _map.Graph.Rooms)
+            {
+                CreateRoomOverlay(room);
+            }
+
+            if (_map.ValidationReport != null)
+            {
+                foreach (var failure in _map.ValidationReport.Failures)
+                {
+                    foreach (var cell in failure.Cells)
+                    {
+                        CreateValidationFailureMarker(cell, failure.Code);
+                    }
+                }
+            }
+
+            _levelDesignOverlay.SetActive(_levelDesignOverlayVisible);
+        }
+
+        private void CreateRouteOverlay(DrillSnakeRoute route)
+        {
+            var routeObject = new GameObject(
+                route.Kind == DrillSnakeRouteKind.SafeLongRoute
+                    ? $"Safe Long Route {route.Id}"
+                    : route.Kind == DrillSnakeRouteKind.RiskySoftRockShortcut
+                        ? $"Risky Short Route {route.Id}"
+                        : $"Required Route {route.Id}");
+            routeObject.transform.SetParent(_levelDesignOverlay.transform, false);
+
+            var line = routeObject.AddComponent<LineRenderer>();
+            line.sharedMaterial = route.Kind switch
+            {
+                DrillSnakeRouteKind.SafeLongRoute => _safeRouteMaterial,
+                DrillSnakeRouteKind.RiskySoftRockShortcut => _riskyRouteMaterial,
+                _ => _standardRouteMaterial
+            };
+            line.useWorldSpace = true;
+            line.positionCount = route.Waypoints.Count;
+            line.startWidth = route.Kind == DrillSnakeRouteKind.RiskySoftRockShortcut
+                ? 0.22f
+                : 0.14f;
+            line.endWidth = line.startWidth;
+            line.numCapVertices = 3;
+            for (var i = 0; i < route.Waypoints.Count; i++)
+            {
+                line.SetPosition(i, GridToWorld(route.Waypoints[i], 1.28f));
+            }
+        }
+
+        private void CreateRoomOverlay(DrillSnakeRoom room)
+        {
+            var material = GetRoomOverlayMaterial(room);
+            var boundsObject = new GameObject(
+                $"Turning Chamber {room.Id} — {room.Name}");
+            boundsObject.transform.SetParent(_levelDesignOverlay.transform, false);
+            var bounds = room.Bounds;
+            var minimum = GridToWorld(
+                new Vector2Int(bounds.xMin, bounds.yMin),
+                1.31f);
+            var maximum = GridToWorld(
+                new Vector2Int(bounds.xMax - 1, bounds.yMax - 1),
+                1.31f);
+            minimum -= new Vector3(0.47f, 0f, 0.47f);
+            maximum += new Vector3(0.47f, 0f, 0.47f);
+
+            var outline = boundsObject.AddComponent<LineRenderer>();
+            outline.sharedMaterial = material;
+            outline.useWorldSpace = true;
+            outline.positionCount = 5;
+            outline.startWidth = 0.12f;
+            outline.endWidth = 0.12f;
+            outline.numCornerVertices = 2;
+            outline.SetPosition(0, new Vector3(minimum.x, minimum.y, minimum.z));
+            outline.SetPosition(1, new Vector3(maximum.x, minimum.y, minimum.z));
+            outline.SetPosition(2, new Vector3(maximum.x, minimum.y, maximum.z));
+            outline.SetPosition(3, new Vector3(minimum.x, minimum.y, maximum.z));
+            outline.SetPosition(4, new Vector3(minimum.x, minimum.y, minimum.z));
+
+            var node = CreatePrimitive(
+                PrimitiveType.Sphere,
+                $"Room Node {room.Id}",
+                _levelDesignOverlay.transform,
+                material);
+            node.transform.position = GridToWorld(room.Center, 1.38f);
+            node.transform.localScale = room.Kind == DrillSnakeRoomKind.Refinery
+                ? Vector3.one * 0.72f
+                : Vector3.one * 0.48f;
+
+            var labelObject = new GameObject($"Room Label {room.Id}");
+            labelObject.transform.SetParent(_levelDesignOverlay.transform, false);
+            labelObject.transform.position = GridToWorld(room.Center, 1.52f);
+            labelObject.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+            var label = labelObject.AddComponent<TextMesh>();
+            label.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            label.fontSize = 30;
+            label.characterSize = 0.075f;
+            label.anchor = TextAnchor.LowerCenter;
+            label.alignment = TextAlignment.Center;
+            label.color = material.color;
+            label.GetComponent<MeshRenderer>().sharedMaterial = label.font.material;
+            label.text =
+                $"R{room.Id}  {room.Bounds.width}x{room.Bounds.height}\n" +
+                $"D={room.GraphDistance}  {DistanceTierLabel(room.DistanceTier)}";
+        }
+
+        private void CreateValidationFailureMarker(Vector2Int cell, string code)
+        {
+            if (!_map.IsInBounds(cell))
+            {
+                return;
+            }
+
+            var marker = CreatePrimitive(
+                PrimitiveType.Cube,
+                $"Validation Failure {code} at {cell.x},{cell.y}",
+                _levelDesignOverlay.transform,
+                _validationFailureMaterial);
+            marker.transform.position = GridToWorld(cell, 1.56f);
+            marker.transform.localScale = new Vector3(0.72f, 0.18f, 0.72f);
+            marker.transform.rotation = Quaternion.Euler(0f, 45f, 0f);
+        }
+
+        private Material GetRoomOverlayMaterial(DrillSnakeRoom room)
+        {
+            return room.DistanceTier switch
+            {
+                DrillSnakeDistanceTier.Refinery => _refineryNodeMaterial,
+                DrillSnakeDistanceTier.Common => _commonZoneMaterial,
+                DrillSnakeDistanceTier.Rare => _rareZoneMaterial,
+                _ => _veryRareZoneMaterial
+            };
+        }
+
+        private static string DistanceTierLabel(DrillSnakeDistanceTier tier)
+        {
+            return tier switch
+            {
+                DrillSnakeDistanceTier.Refinery => "REFINERY",
+                DrillSnakeDistanceTier.Common => "COMMON ZONE",
+                DrillSnakeDistanceTier.Rare => "RARE ZONE",
+                _ => "VERY RARE ZONE"
+            };
         }
 
         private SegmentView CreateSegmentView(int index, DrillSnakeOreType oreType)
