@@ -11,9 +11,18 @@ namespace DrillSnake
         [SerializeField, Min(0.03f)] private float boostTickSeconds = 0.105f;
         [SerializeField, Min(1f)] private float slowTestingMultiplier = 3f;
         [SerializeField, Range(0.01f, 0.2f)] private float speedUpgradeReduction = 0.018f;
-        [SerializeField, Min(0f)] private float drillDelaySeconds = 0.15f;
-        [SerializeField, Range(0f, 0.75f)] private float drillUpgradeReduction = 0.18f;
         [SerializeField, Min(0.03f)] private float bankSegmentSeconds = 0.09f;
+
+        [Header("Drilling")]
+        [SerializeField, Min(1)] private int softRockHealth = 2;
+        [SerializeField, Min(1)] private int commonOreHealth = 2;
+        [SerializeField, Min(1)] private int rareOreHealth = 3;
+        [SerializeField, Min(1)] private int veryRareOreHealth = 4;
+        [SerializeField, Min(1)] private int baseDrillDamage = 1;
+        [SerializeField, Min(0)] private int drillDamagePerLevel = 1;
+        [SerializeField, Min(0.1f)] private float impactRecoverySeconds = 0.3f;
+        [SerializeField, Range(0.5f, 1f)] private float recoilDurationFraction = 0.92f;
+        [SerializeField, Range(0.1f, 0.8f)] private float recoilDistance = 0.52f;
 
         [Header("Heat")]
         [SerializeField, Min(1f)] private float baseMaximumHeat = 100f;
@@ -60,11 +69,35 @@ namespace DrillSnake
             return slowTesting ? interval * slowTestingMultiplier : interval;
         }
 
-        public float GetDrillDelay(int drillMotorLevel)
+        public int GetCellDurability(DrillSnakeCellType cellType)
         {
-            var multiplier = Mathf.Pow(1f - drillUpgradeReduction, drillMotorLevel);
-            return drillDelaySeconds * multiplier;
+            return cellType switch
+            {
+                DrillSnakeCellType.SoftRock => softRockHealth,
+                DrillSnakeCellType.CommonOre => commonOreHealth,
+                DrillSnakeCellType.RareOre => rareOreHealth,
+                DrillSnakeCellType.VeryRareOre => veryRareOreHealth,
+                _ => 0
+            };
         }
+
+        public int GetDrillDamage(int drillMotorLevel)
+        {
+            return baseDrillDamage +
+                   Mathf.Max(0, drillMotorLevel) * drillDamagePerLevel;
+        }
+
+        public float GetImpactInterval(float movementInterval)
+        {
+            return Mathf.Max(movementInterval, impactRecoverySeconds);
+        }
+
+        public float GetRecoilDuration(float impactInterval)
+        {
+            return Mathf.Min(impactInterval * recoilDurationFraction, 0.4f);
+        }
+
+        public float RecoilDistance => recoilDistance;
 
         public int GetOreValue(DrillSnakeOreType oreType, int scannerLevel)
         {

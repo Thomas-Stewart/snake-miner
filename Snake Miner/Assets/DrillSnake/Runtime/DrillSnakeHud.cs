@@ -9,14 +9,16 @@ namespace DrillSnake
     {
         private readonly Dictionary<DrillSnakeUpgradeType, Button> _upgradeButtons = new();
         private readonly Dictionary<DrillSnakeUpgradeType, Text> _upgradeLabels = new();
+        private readonly Dictionary<DrillSnakeUpgradeType, Sprite> _upgradeIcons = new();
 
         private Font _font;
-        private Text _statsText;
+        private Text _bankedText;
+        private Text _cargoText;
+        private Text _heatText;
         private Text _objectiveText;
         private Text _debugText;
         private Text _messageText;
-        private Text _heatText;
-        private RectTransform _heatFill;
+        private GameObject _debugPanel;
         private GameObject _upgradePanel;
         private float _messageHideTime;
         private Action<DrillSnakeUpgradeType> _purchaseUpgrade;
@@ -25,6 +27,7 @@ namespace DrillSnake
         {
             _purchaseUpgrade = purchaseUpgrade;
             _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            CreateUpgradeSprites();
 
             var canvas = gameObject.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
@@ -39,7 +42,6 @@ namespace DrillSnake
             BuildObjective();
             BuildStats();
             BuildDebugLegend();
-            BuildHeatBar();
             BuildMessage();
             BuildUpgradePanel();
         }
@@ -65,13 +67,18 @@ namespace DrillSnake
             Func<DrillSnakeUpgradeType, int> getUpgradeLevel,
             Func<DrillSnakeUpgradeType, int> getUpgradeCost)
         {
-            _statsText.text =
-                $"BANKED CREDITS  <color=#55F1E4>{bankedCredits:N0}</color>\n" +
-                $"CARGO SEGMENTS  <color=#FFE474>{cargoCount}</color>\n" +
-                $"CARGO VALUE     <color=#FFE474>{cargoValue:N0}</color>\n" +
-                $"LAYOUT          <color=#B9C9D6>{presetName}</color>\n" +
-                $"REQUESTED SEED  <color=#B9C9D6>{requestedSeed}</color>\n" +
-                $"ACCEPTED / TRY  <color=#B9C9D6>{acceptedSeed} / {generationAttempt}</color>";
+            _bankedText.text =
+                "<size=16><color=#AEB4B8>SCRAP</color></size>\n" +
+                $"<size=28>{bankedCredits:N0}</size>\n" +
+                "<size=13><color=#8C9499>BANKED</color></size>";
+            _cargoText.text =
+                "<size=16><color=#AEB4B8>CARGO</color></size>\n" +
+                $"<size=28>{cargoCount}</size>\n" +
+                $"<size=13><color=#F4B844>{cargoValue:N0} VALUE</color></size>";
+            _heatText.text =
+                "<size=16><color=#AEB4B8>HEAT</color></size>\n" +
+                $"<size=28>{Mathf.CeilToInt(heat)}</size>\n" +
+                $"<size=13><color=#F4B844>{Mathf.CeilToInt(maximumHeat)} MAX</color></size>";
 
             var debugFlags = string.Empty;
             if (slowTesting)
@@ -121,15 +128,11 @@ namespace DrillSnake
                 "H              Heat-free mode\n" +
                 $"<color=#86A4B4>{validationText}</color>" +
                 debugFlags;
-
-            var heatNormalized = maximumHeat <= 0f ? 0f : Mathf.Clamp01(heat / maximumHeat);
-            _heatFill.anchorMax = new Vector2(heatNormalized, 1f);
-            _heatText.text = $"HEAT  {Mathf.CeilToInt(heat)} / {Mathf.CeilToInt(maximumHeat)}";
-            var heatImage = _heatFill.GetComponent<Image>();
-            heatImage.color = Color.Lerp(
-                new Color(0.08f, 0.82f, 0.72f),
-                new Color(1f, 0.2f, 0.08f),
-                Mathf.Pow(heatNormalized, 1.7f));
+            _debugPanel.SetActive(
+                levelDesignOverlayVisible ||
+                gridVisible ||
+                slowTesting ||
+                heatFree);
 
             _upgradePanel.SetActive(atRefinery);
             foreach (var pair in _upgradeButtons)
@@ -139,14 +142,15 @@ namespace DrillSnake
                 var cost = getUpgradeCost(type);
                 pair.Value.interactable = bankedCredits >= cost;
                 _upgradeLabels[type].text =
-                    $"{UpgradeName(type)}  LV.{level}\n" +
-                    $"<size=19>{UpgradeEffect(type)}  •  {cost:N0} CR</size>";
+                    $"{UpgradeName(type)}  <size=15><color=#949CA1>LV.{level}</color></size>\n" +
+                    $"<size=17><color=#C2C6C8>{UpgradeEffect(type)}</color></size>\n" +
+                    $"<size=20><color=#F4B844>SCRAP  {cost:N0}</color></size>";
             }
 
             if (waitingToDepart && atRefinery && Time.time >= _messageHideTime)
             {
                 _messageText.color = new Color(0.8f, 0.94f, 0.98f);
-                _messageText.text = "CHOOSE A DIRECTION TO DEPART";
+                _messageText.text = "CHOOSE A DIRECTION";
             }
         }
 
@@ -176,22 +180,22 @@ namespace DrillSnake
                 new Color(0.025f, 0.04f, 0.055f, 0.91f));
             SetRect(
                 panel.GetComponent<RectTransform>(),
-                new Vector2(0.5f, 1f),
-                new Vector2(0.5f, 1f),
-                new Vector2(0f, -26f),
-                new Vector2(620f, 72f),
-                new Vector2(0.5f, 1f));
+                new Vector2(1f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(-16f, -16f),
+                new Vector2(550f, 86f),
+                new Vector2(1f, 1f));
 
             _objectiveText = CreateText(
                 "Objective",
                 panel.transform,
-                25,
+                23,
                 TextAnchor.MiddleCenter,
                 FontStyle.Bold);
-            Stretch(_objectiveText.rectTransform, 14f);
+            Stretch(_objectiveText.rectTransform, 16f);
             _objectiveText.text =
-                "MINE ORE AND RETURN TO THE REFINERY\n" +
-                "<size=17><color=#86A4B4>Longer cargo trains are harder to bring home.</color></size>";
+                "<color=#F2F0E9>MINE ORE AND RETURN TO THE REFINERY</color>\n" +
+                "<size=15><color=#A9ADB0>Bring the entire cargo train home to bank its value.</color></size>";
         }
 
         private void BuildStats()
@@ -204,89 +208,54 @@ namespace DrillSnake
                 panel.GetComponent<RectTransform>(),
                 new Vector2(0f, 1f),
                 new Vector2(0f, 1f),
-                new Vector2(22f, -22f),
-                new Vector2(470f, 240f),
+                new Vector2(16f, -16f),
+                new Vector2(660f, 92f),
                 new Vector2(0f, 1f));
 
-            _statsText = CreateText(
-                "Stats",
-                panel.transform,
-                22,
-                TextAnchor.UpperLeft,
-                FontStyle.Bold);
-            Stretch(_statsText.rectTransform, 18f);
-            _statsText.supportRichText = true;
-            _statsText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            _bankedText = CreateStatBlock("Banked Scrap", panel.transform, 0);
+            _cargoText = CreateStatBlock("Cargo", panel.transform, 1);
+            _heatText = CreateStatBlock("Heat", panel.transform, 2);
+
+            for (var separatorIndex = 1; separatorIndex <= 2; separatorIndex++)
+            {
+                var separator = CreateFlatPanel(
+                    $"Resource Separator {separatorIndex}",
+                    panel.transform,
+                    new Color(0.33f, 0.36f, 0.38f, 0.7f));
+                SetRect(
+                    separator.GetComponent<RectTransform>(),
+                    new Vector2(0f, 0.5f),
+                    new Vector2(0f, 0.5f),
+                    new Vector2(separatorIndex * 220f, 0f),
+                    new Vector2(2f, 68f),
+                    new Vector2(0.5f, 0.5f));
+            }
         }
 
         private void BuildDebugLegend()
         {
-            var panel = CreatePanel(
+            _debugPanel = CreatePanel(
                 "Controls Panel",
                 transform,
                 new Color(0.025f, 0.04f, 0.055f, 0.86f));
             SetRect(
-                panel.GetComponent<RectTransform>(),
+                _debugPanel.GetComponent<RectTransform>(),
                 new Vector2(1f, 1f),
                 new Vector2(1f, 1f),
-                new Vector2(-22f, -22f),
-                new Vector2(490f, 385f),
+                new Vector2(-16f, -116f),
+                new Vector2(390f, 300f),
                 new Vector2(1f, 1f));
 
             _debugText = CreateText(
                 "Controls",
-                panel.transform,
-                20,
+                _debugPanel.transform,
+                16,
                 TextAnchor.UpperLeft,
                 FontStyle.Normal);
-            Stretch(_debugText.rectTransform, 18f);
+            Stretch(_debugText.rectTransform, 20f);
             _debugText.supportRichText = true;
             _debugText.lineSpacing = 1.05f;
-        }
-
-        private void BuildHeatBar()
-        {
-            var panel = CreatePanel(
-                "Heat Panel",
-                transform,
-                new Color(0.025f, 0.04f, 0.055f, 0.94f));
-            SetRect(
-                panel.GetComponent<RectTransform>(),
-                new Vector2(0.5f, 0f),
-                new Vector2(0.5f, 0f),
-                new Vector2(0f, 24f),
-                new Vector2(620f, 65f),
-                new Vector2(0.5f, 0f));
-
-            var background = CreatePanel(
-                "Heat Background",
-                panel.transform,
-                new Color(0.08f, 0.1f, 0.12f, 1f));
-            SetRect(
-                background.GetComponent<RectTransform>(),
-                new Vector2(0f, 0f),
-                new Vector2(1f, 1f),
-                Vector2.zero,
-                new Vector2(-24f, -22f),
-                new Vector2(0.5f, 0.5f));
-
-            var fill = CreatePanel(
-                "Heat Fill",
-                background.transform,
-                new Color(0.08f, 0.82f, 0.72f));
-            _heatFill = fill.GetComponent<RectTransform>();
-            _heatFill.anchorMin = Vector2.zero;
-            _heatFill.anchorMax = new Vector2(0f, 1f);
-            _heatFill.offsetMin = Vector2.zero;
-            _heatFill.offsetMax = Vector2.zero;
-
-            _heatText = CreateText(
-                "Heat Label",
-                panel.transform,
-                20,
-                TextAnchor.MiddleCenter,
-                FontStyle.Bold);
-            Stretch(_heatText.rectTransform, 4f);
+            _debugPanel.SetActive(false);
         }
 
         private void BuildMessage()
@@ -294,15 +263,15 @@ namespace DrillSnake
             _messageText = CreateText(
                 "Payoff and Failure Message",
                 transform,
-                31,
+                22,
                 TextAnchor.MiddleCenter,
                 FontStyle.Bold);
             SetRect(
                 _messageText.rectTransform,
-                new Vector2(0.5f, 0.72f),
-                new Vector2(0.5f, 0.72f),
+                new Vector2(0.5f, 0.64f),
+                new Vector2(0.5f, 0.64f),
                 Vector2.zero,
-                new Vector2(900f, 110f),
+                new Vector2(680f, 72f),
                 new Vector2(0.5f, 0.5f));
 
             var outline = _messageText.gameObject.AddComponent<Outline>();
@@ -318,26 +287,26 @@ namespace DrillSnake
                 new Color(0.025f, 0.04f, 0.055f, 0.95f));
             SetRect(
                 _upgradePanel.GetComponent<RectTransform>(),
-                new Vector2(0f, 0f),
-                new Vector2(0f, 0f),
-                new Vector2(22f, 22f),
-                new Vector2(390f, 390f),
-                new Vector2(0f, 0f));
+                new Vector2(0.5f, 0f),
+                new Vector2(0.5f, 0f),
+                new Vector2(0f, 14f),
+                new Vector2(1280f, 188f),
+                new Vector2(0.5f, 0f));
 
             var title = CreateText(
                 "Upgrade Title",
                 _upgradePanel.transform,
-                25,
+                16,
                 TextAnchor.MiddleCenter,
                 FontStyle.Bold);
             SetRect(
                 title.rectTransform,
                 new Vector2(0f, 1f),
                 new Vector2(1f, 1f),
-                new Vector2(0f, -12f),
-                new Vector2(-24f, 50f),
+                new Vector2(0f, -6f),
+                new Vector2(-24f, 26f),
                 new Vector2(0.5f, 1f));
-            title.text = "REFINERY UPGRADES";
+            title.text = "<color=#A9ADB0>REFINERY UPGRADES</color>";
 
             var types = new[]
             {
@@ -357,33 +326,53 @@ namespace DrillSnake
             var buttonObject = CreatePanel(
                 $"{type} Button",
                 _upgradePanel.transform,
-                new Color(0.12f, 0.26f, 0.3f, 1f));
+                new Color(0.055f, 0.062f, 0.068f, 0.98f));
             SetRect(
                 buttonObject.GetComponent<RectTransform>(),
-                new Vector2(0f, 1f),
-                new Vector2(1f, 1f),
-                new Vector2(0f, -70f - index * 75f),
-                new Vector2(-30f, 62f),
-                new Vector2(0.5f, 1f));
+                new Vector2(0f, 0f),
+                new Vector2(0f, 0f),
+                new Vector2(18f + index * 311f, 14f),
+                new Vector2(300f, 144f),
+                new Vector2(0f, 0f));
 
             var button = buttonObject.AddComponent<Button>();
             button.targetGraphic = buttonObject.GetComponent<Image>();
             var colors = button.colors;
-            colors.normalColor = new Color(0.16f, 0.36f, 0.4f);
-            colors.highlightedColor = new Color(0.2f, 0.58f, 0.58f);
-            colors.pressedColor = new Color(0.08f, 0.8f, 0.72f);
-            colors.disabledColor = new Color(0.12f, 0.14f, 0.16f, 0.72f);
+            colors.normalColor = Color.white;
+            colors.highlightedColor = new Color(1f, 0.82f, 0.55f);
+            colors.pressedColor = new Color(0.92f, 0.62f, 0.28f);
+            colors.disabledColor = new Color(0.46f, 0.48f, 0.5f, 0.9f);
             button.colors = colors;
             var capturedType = type;
             button.onClick.AddListener(() => _purchaseUpgrade?.Invoke(capturedType));
 
+            var iconObject = new GameObject($"{type} Icon", typeof(RectTransform));
+            iconObject.transform.SetParent(buttonObject.transform, false);
+            var icon = iconObject.AddComponent<Image>();
+            icon.sprite = _upgradeIcons[type];
+            icon.preserveAspect = true;
+            icon.raycastTarget = false;
+            SetRect(
+                icon.rectTransform,
+                new Vector2(0f, 0.5f),
+                new Vector2(0f, 0.5f),
+                new Vector2(14f, 0f),
+                new Vector2(96f, 96f),
+                new Vector2(0f, 0.5f));
+
             var label = CreateText(
                 $"{type} Label",
                 buttonObject.transform,
-                22,
-                TextAnchor.MiddleCenter,
+                20,
+                TextAnchor.MiddleLeft,
                 FontStyle.Bold);
-            Stretch(label.rectTransform, 6f);
+            SetRect(
+                label.rectTransform,
+                new Vector2(0f, 0f),
+                new Vector2(0f, 1f),
+                new Vector2(120f, 0f),
+                new Vector2(164f, -20f),
+                new Vector2(0f, 0.5f));
             label.supportRichText = true;
 
             _upgradeButtons[type] = button;
@@ -404,17 +393,88 @@ namespace DrillSnake
             text.fontSize = size;
             text.fontStyle = style;
             text.alignment = alignment;
-            text.color = new Color(0.92f, 0.96f, 0.98f);
+            text.color = new Color(0.93f, 0.93f, 0.9f);
             text.raycastTarget = false;
             return text;
         }
 
-        private static GameObject CreatePanel(string name, Transform parent, Color color)
+        private Text CreateStatBlock(string name, Transform parent, int index)
+        {
+            var text = CreateText(
+                name,
+                parent,
+                22,
+                TextAnchor.MiddleLeft,
+                FontStyle.Bold);
+            SetRect(
+                text.rectTransform,
+                new Vector2(0f, 0f),
+                new Vector2(0f, 1f),
+                new Vector2(22f + index * 220f, 0f),
+                new Vector2(180f, -12f),
+                new Vector2(0f, 0.5f));
+            text.supportRichText = true;
+            text.lineSpacing = 0.82f;
+            return text;
+        }
+
+        private GameObject CreatePanel(string name, Transform parent, Color color)
         {
             var panel = new GameObject(name, typeof(RectTransform));
             panel.transform.SetParent(parent, false);
             var image = panel.AddComponent<Image>();
             image.color = color;
+            var outline = panel.AddComponent<Outline>();
+            outline.effectColor = new Color(0.35f, 0.38f, 0.4f, 0.72f);
+            outline.effectDistance = new Vector2(2f, -2f);
+
+            return panel;
+        }
+
+        private void CreateUpgradeSprites()
+        {
+            var atlas = Resources.Load<Texture2D>("Art/DrillSnakeUpgradeAtlas");
+            _upgradeIcons[DrillSnakeUpgradeType.Cooling] =
+                CreateAtlasSprite(atlas, 0, 1, "Cooling Upgrade Icon");
+            _upgradeIcons[DrillSnakeUpgradeType.DrillMotor] =
+                CreateAtlasSprite(atlas, 1, 1, "Drill Motor Upgrade Icon");
+            _upgradeIcons[DrillSnakeUpgradeType.DriveSpeed] =
+                CreateAtlasSprite(atlas, 0, 0, "Drive Speed Upgrade Icon");
+            _upgradeIcons[DrillSnakeUpgradeType.OreScanner] =
+                CreateAtlasSprite(atlas, 1, 0, "Ore Scanner Upgrade Icon");
+        }
+
+        private static Sprite CreateAtlasSprite(
+            Texture2D atlas,
+            int column,
+            int row,
+            string name)
+        {
+            if (atlas == null)
+            {
+                return null;
+            }
+
+            atlas.wrapMode = TextureWrapMode.Clamp;
+            atlas.filterMode = FilterMode.Bilinear;
+            var width = atlas.width / 2;
+            var height = atlas.height / 2;
+            var sprite = Sprite.Create(
+                atlas,
+                new Rect(column * width, row * height, width, height),
+                new Vector2(0.5f, 0.5f),
+                500f,
+                2u,
+                SpriteMeshType.FullRect);
+            sprite.name = name;
+            return sprite;
+        }
+
+        private static GameObject CreateFlatPanel(string name, Transform parent, Color color)
+        {
+            var panel = new GameObject(name, typeof(RectTransform));
+            panel.transform.SetParent(parent, false);
+            panel.AddComponent<Image>().color = color;
             return panel;
         }
 
@@ -458,7 +518,7 @@ namespace DrillSnake
             return type switch
             {
                 DrillSnakeUpgradeType.Cooling => "+18 max heat",
-                DrillSnakeUpgradeType.DrillMotor => "faster drilling",
+                DrillSnakeUpgradeType.DrillMotor => "stronger impacts",
                 DrillSnakeUpgradeType.DriveSpeed => "faster movement",
                 DrillSnakeUpgradeType.OreScanner => "+15% ore value",
                 _ => string.Empty

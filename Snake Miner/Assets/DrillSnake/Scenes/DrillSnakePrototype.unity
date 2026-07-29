@@ -166,9 +166,16 @@ MonoBehaviour:
     boostTickSeconds: 0.105
     slowTestingMultiplier: 3
     speedUpgradeReduction: 0.018
-    drillDelaySeconds: 0.15
-    drillUpgradeReduction: 0.18
     bankSegmentSeconds: 0.09
+    softRockHealth: 2
+    commonOreHealth: 2
+    rareOreHealth: 3
+    veryRareOreHealth: 4
+    baseDrillDamage: 1
+    drillDamagePerLevel: 1
+    impactRecoverySeconds: 0.3
+    recoilDurationFraction: 0.92
+    recoilDistance: 0.52
     baseMaximumHeat: 100
     coolingUpgradeCapacity: 18
     movementHeat: 0.55

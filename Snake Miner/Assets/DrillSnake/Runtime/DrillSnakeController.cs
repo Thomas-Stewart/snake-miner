@@ -23,6 +23,10 @@ namespace DrillSnake
         private DrillSnakeSimulation _simulation;
         private DrillSnakeWorldView _worldView;
         private DrillSnakeHud _hud;
+        private Camera _camera;
+        private Vector3 _cameraVelocity;
+        private Vector3 _cameraLead;
+        private Vector3 _cameraLeadVelocity;
         private float _nextMoveTime;
         private bool _expeditionMoving;
         private bool _busy;
@@ -70,9 +74,14 @@ namespace DrillSnake
             UpdateHud();
         }
 
+        private void LateUpdate()
+        {
+            UpdateCameraFollow();
+        }
+
         private void BuildPresentation()
         {
-            EnsureCamera();
+            _camera = EnsureCamera();
             EnsureLighting();
             EnsureEventSystem();
 
@@ -96,6 +105,7 @@ namespace DrillSnake
             _simulation = new DrillSnakeSimulation(map);
             _worldView.BuildWorld(map);
             _worldView.SyncSnake(_simulation, 0f);
+            SnapCameraToSnake();
             _nextMoveTime = Time.time;
 
             if (announce)
@@ -116,17 +126,39 @@ namespace DrillSnake
                 GetUpgradeLevel(DrillSnakeUpgradeType.OreScanner),
                 GetUpgradeLevel(DrillSnakeUpgradeType.Cooling),
                 boosting,
-                _heatFree);
+                _heatFree,
+                GetUpgradeLevel(DrillSnakeUpgradeType.DrillMotor));
 
             var interval = tuning.GetMoveInterval(
                 GetUpgradeLevel(DrillSnakeUpgradeType.DriveSpeed),
                 boosting,
                 _slowTesting);
+            if (result.Rebuffed)
+            {
+                interval = tuning.GetImpactInterval(interval);
+            }
+
             if (result.ChangedTerrain)
             {
-                interval += tuning.GetDrillDelay(
-                    GetUpgradeLevel(DrillSnakeUpgradeType.DrillMotor));
                 _worldView.RemoveDrilledCell(result.Cell);
+            }
+
+            if (result.Rebuffed)
+            {
+                _worldView.PlayDrillRecoil(
+                    _simulation.Direction,
+                    tuning.GetRecoilDuration(interval),
+                    tuning.RecoilDistance);
+                var materialName = result.OreType == DrillSnakeOreType.None
+                    ? "ROCK"
+                    : $"{OreName(result.OreType)} ORE";
+                _hud.ShowMessage(
+                    result.RemainingDurability == 0
+                        ? $"{materialName} BREAKS"
+                        : $"{materialName} RESISTS  •  INTEGRITY " +
+                          $"{result.RemainingDurability}",
+                    new Color(1f, 0.58f, 0.16f),
+                    Mathf.Min(0.7f, interval * 1.8f));
             }
 
             _worldView.SyncSnake(_simulation, interval);
@@ -376,7 +408,7 @@ namespace DrillSnake
                 GetUpgradeCost);
         }
 
-        private static void EnsureCamera()
+        private static Camera EnsureCamera()
         {
             var camera = Camera.main;
             if (camera == null)
@@ -387,21 +419,77 @@ namespace DrillSnake
             }
 
             camera.orthographic = true;
-            camera.orthographicSize = 27.5f;
+            camera.orthographicSize = 7.2f;
             camera.nearClipPlane = 0.1f;
             camera.farClipPlane = 120f;
             camera.clearFlags = CameraClearFlags.SolidColor;
-            camera.backgroundColor = new Color(0.012f, 0.02f, 0.028f);
-            camera.transform.position = new Vector3(0f, 38f, -17f);
-            camera.transform.rotation = Quaternion.Euler(66f, 0f, 0f);
+            camera.backgroundColor = new Color(0.008f, 0.01f, 0.012f);
+            camera.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+            return camera;
+        }
+
+        private void SnapCameraToSnake()
+        {
+            if (_camera == null || _simulation == null)
+            {
+                return;
+            }
+
+            _cameraVelocity = Vector3.zero;
+            _cameraLead = Vector3.zero;
+            _cameraLeadVelocity = Vector3.zero;
+            _camera.transform.position = GetCameraTarget();
+        }
+
+        private void UpdateCameraFollow()
+        {
+            if (_camera == null || _simulation == null)
+            {
+                return;
+            }
+
+            var deltaTime = Mathf.Max(0.0001f, Time.unscaledDeltaTime);
+            var desiredLead = _expeditionMoving
+                ? new Vector3(
+                    _simulation.Direction.x,
+                    0f,
+                    _simulation.Direction.y) * 1.35f
+                : Vector3.zero;
+            _cameraLead = Vector3.SmoothDamp(
+                _cameraLead,
+                desiredLead,
+                ref _cameraLeadVelocity,
+                0.34f,
+                4f,
+                deltaTime);
+
+            _camera.transform.position = Vector3.SmoothDamp(
+                _camera.transform.position,
+                GetCameraTarget(),
+                ref _cameraVelocity,
+                0.2f,
+                16f,
+                deltaTime);
+        }
+
+        private Vector3 GetCameraTarget()
+        {
+            var world = _worldView != null &&
+                        _worldView.TryGetHeadVisualPosition(out var visualPosition)
+                ? visualPosition
+                : DrillSnakeWorldView.GridToWorld(_simulation.Head);
+            return new Vector3(
+                world.x + _cameraLead.x,
+                34f,
+                world.z + _cameraLead.z);
         }
 
         private static void EnsureLighting()
         {
             RenderSettings.ambientMode = AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = new Color(0.24f, 0.3f, 0.36f);
-            RenderSettings.ambientEquatorColor = new Color(0.12f, 0.15f, 0.18f);
-            RenderSettings.ambientGroundColor = new Color(0.025f, 0.03f, 0.04f);
+            RenderSettings.ambientSkyColor = new Color(0.26f, 0.29f, 0.33f);
+            RenderSettings.ambientEquatorColor = new Color(0.14f, 0.14f, 0.145f);
+            RenderSettings.ambientGroundColor = new Color(0.035f, 0.032f, 0.03f);
 
             if (FindFirstObjectByType<Light>() != null)
             {
@@ -411,8 +499,8 @@ namespace DrillSnake
             var lightObject = new GameObject("Excavation Key Light");
             var light = lightObject.AddComponent<Light>();
             light.type = LightType.Directional;
-            light.color = new Color(0.92f, 0.96f, 1f);
-            light.intensity = 1.25f;
+            light.color = new Color(0.78f, 0.84f, 0.92f);
+            light.intensity = 1.18f;
             light.shadows = LightShadows.Soft;
             lightObject.transform.rotation = Quaternion.Euler(48f, -32f, 0f);
         }
@@ -445,9 +533,9 @@ namespace DrillSnake
         {
             return oreType switch
             {
-                DrillSnakeOreType.Common => new Color(0.2f, 0.95f, 0.42f),
-                DrillSnakeOreType.Rare => new Color(0.24f, 0.62f, 1f),
-                DrillSnakeOreType.VeryRare => new Color(0.95f, 0.3f, 1f),
+                DrillSnakeOreType.Common => new Color(1f, 0.47f, 0.08f),
+                DrillSnakeOreType.Rare => new Color(0.22f, 0.7f, 1f),
+                DrillSnakeOreType.VeryRare => new Color(0.98f, 0.26f, 0.8f),
                 _ => Color.white
             };
         }

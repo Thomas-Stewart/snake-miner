@@ -5,17 +5,19 @@ using UnityEngine;
 namespace DrillSnake
 {
     /// <summary>
-    /// Runtime-only graybox presentation. Every object is generated from
-    /// primitives so the prototype has no asset assignment requirements.
+    /// Runtime-built industrial mine presentation. Generated materials provide
+    /// the hand-painted surface language while primitives keep the prototype
+    /// dependency-light and deterministic.
     /// </summary>
     public sealed class DrillSnakeWorldView : MonoBehaviour
     {
         private sealed class SegmentView
         {
             public GameObject Root;
-            public Renderer AccentRenderer;
+            public Transform Artwork;
             public Vector3 StartPosition;
             public Vector3 TargetPosition;
+            public Quaternion StartRotation;
             public Quaternion TargetRotation;
             public float MovementStart;
             public float MovementDuration;
@@ -23,7 +25,6 @@ namespace DrillSnake
 
         private readonly Dictionary<Vector2Int, GameObject> _solidCells = new();
         private readonly List<SegmentView> _segmentViews = new();
-        private readonly Dictionary<DrillSnakeOreType, Material> _oreMaterials = new();
 
         private DrillSnakeMap _map;
         private Transform _worldRoot;
@@ -36,10 +37,7 @@ namespace DrillSnake
         private Material _bedrockMaterial;
         private Material _refineryMaterial;
         private Material _dockMaterial;
-        private Material _headMaterial;
-        private Material _chassisMaterial;
-        private Material _trackMaterial;
-        private Material _cargoFrameMaterial;
+        private Material _refineryDarkMaterial;
         private Material _gridMaterial;
         private Material _standardRouteMaterial;
         private Material _safeRouteMaterial;
@@ -49,10 +47,34 @@ namespace DrillSnake
         private Material _rareZoneMaterial;
         private Material _veryRareZoneMaterial;
         private Material _validationFailureMaterial;
+        private Sprite _headSprite;
+        private Sprite _chassisSprite;
+        private Sprite _cargoSprite;
+        private Sprite _refinerySprite;
+        private Sprite _commonOreSprite;
+        private Sprite _rareOreSprite;
+        private Sprite _veryRareOreSprite;
+        private Sprite _lampSprite;
+        private Vector3 _recoilDirection;
+        private float _recoilStartTime;
+        private float _recoilDuration;
+        private float _recoilDistance;
 
         public bool GridVisible => _gridVisible;
 
         public bool LevelDesignOverlayVisible => _levelDesignOverlayVisible;
+
+        public bool TryGetHeadVisualPosition(out Vector3 position)
+        {
+            if (_segmentViews.Count > 0 && _segmentViews[0].Root != null)
+            {
+                position = _segmentViews[0].Root.transform.position;
+                return true;
+            }
+
+            position = default;
+            return false;
+        }
 
         public void BuildWorld(DrillSnakeMap map)
         {
@@ -65,6 +87,7 @@ namespace DrillSnake
 
             _solidCells.Clear();
             _segmentViews.Clear();
+            _recoilDuration = 0f;
             CreateMaterials();
 
             _worldRoot = new GameObject("Generated Drill Snake World").transform;
@@ -79,6 +102,8 @@ namespace DrillSnake
                 }
             }
 
+            CreateRefinerySetDressing();
+            CreateMineLamps();
             CreateGridOverlay();
             CreateLevelDesignOverlay();
         }
@@ -121,6 +146,20 @@ namespace DrillSnake
             StartCoroutine(ShrinkAndDestroy(cellObject, 0.09f));
         }
 
+        public void PlayDrillRecoil(
+            Vector2Int direction,
+            float duration,
+            float distance)
+        {
+            _recoilDirection = new Vector3(
+                -direction.x,
+                0f,
+                -direction.y);
+            _recoilStartTime = Time.time;
+            _recoilDuration = Mathf.Max(0.05f, duration);
+            _recoilDistance = Mathf.Max(0.05f, distance);
+        }
+
         public void SyncSnake(DrillSnakeSimulation simulation, float movementDuration)
         {
             while (_segmentViews.Count > simulation.Segments.Count)
@@ -137,12 +176,12 @@ namespace DrillSnake
             while (_segmentViews.Count < simulation.Segments.Count)
             {
                 var index = _segmentViews.Count;
-                var oreType = simulation.GetSegmentOreType(index);
-                var view = CreateSegmentView(index, oreType);
+                var view = CreateSegmentView(index);
                 var position = GridToWorld(simulation.Segments[index], SegmentHeight(index));
                 view.Root.transform.position = position;
                 view.StartPosition = position;
                 view.TargetPosition = position;
+                view.StartRotation = view.Root.transform.rotation;
                 view.TargetRotation = view.Root.transform.rotation;
                 _segmentViews.Add(view);
             }
@@ -151,17 +190,12 @@ namespace DrillSnake
             for (var i = 0; i < _segmentViews.Count; i++)
             {
                 var view = _segmentViews[i];
-                if (view.MovementDuration > 0f &&
-                    now >= view.MovementStart + view.MovementDuration)
-                {
-                    view.Root.transform.SetPositionAndRotation(
-                        view.TargetPosition,
-                        view.TargetRotation);
-                }
+                ApplyInterpolatedPose(view, now);
 
                 var target = GridToWorld(simulation.Segments[i], SegmentHeight(i));
                 view.StartPosition = view.Root.transform.position;
                 view.TargetPosition = target;
+                view.StartRotation = view.Root.transform.rotation;
                 view.MovementStart = now;
                 view.MovementDuration = movementDuration;
 
@@ -180,21 +214,13 @@ namespace DrillSnake
                     view.TargetRotation = Quaternion.LookRotation(movement, Vector3.up);
                 }
 
-                // Heading changes snap at the authoritative cell center. Only
-                // position is interpolated, so there is no visual turn radius.
-                view.Root.transform.rotation = view.TargetRotation;
-
-                if (view.AccentRenderer != null && i >= DrillSnakeSimulation.MinimumSegmentCount)
-                {
-                    view.AccentRenderer.sharedMaterial =
-                        _oreMaterials[simulation.GetSegmentOreType(i)];
-                }
-
                 if (movementDuration <= 0f)
                 {
                     view.Root.transform.SetPositionAndRotation(
                         view.TargetPosition,
                         view.TargetRotation);
+                    view.StartPosition = view.TargetPosition;
+                    view.StartRotation = view.TargetRotation;
                 }
             }
         }
@@ -252,68 +278,140 @@ namespace DrillSnake
                     continue;
                 }
 
-                var t = Mathf.Clamp01(
-                    (now - view.MovementStart) / Mathf.Max(0.01f, view.MovementDuration));
-                var eased = t * t * (3f - 2f * t);
-                view.Root.transform.SetPositionAndRotation(
-                    Vector3.Lerp(view.StartPosition, view.TargetPosition, eased),
-                    view.TargetRotation);
+                ApplyInterpolatedPose(view, now);
             }
+
+            ApplyDrillRecoil(now);
+        }
+
+        private void ApplyDrillRecoil(float now)
+        {
+            var strength = 0f;
+            if (_recoilDuration > 0f)
+            {
+                var progress = Mathf.Clamp01(
+                    (now - _recoilStartTime) / _recoilDuration);
+                if (progress < 0.2f)
+                {
+                    strength = Mathf.SmoothStep(0f, 1f, progress / 0.2f);
+                }
+                else
+                {
+                    strength = 1f - Mathf.SmoothStep(
+                        0f,
+                        1f,
+                        (progress - 0.2f) / 0.8f);
+                }
+
+                if (progress >= 1f)
+                {
+                    _recoilDuration = 0f;
+                }
+            }
+
+            var worldOffset = _recoilDirection * (_recoilDistance * strength);
+            for (var index = 0; index < _segmentViews.Count; index++)
+            {
+                var view = _segmentViews[index];
+                if (view.Root == null || view.Artwork == null)
+                {
+                    continue;
+                }
+
+                view.Artwork.localPosition = index == 0
+                    ? view.Root.transform.InverseTransformVector(worldOffset)
+                    : Vector3.zero;
+            }
+        }
+
+        private static void ApplyInterpolatedPose(SegmentView view, float now)
+        {
+            if (view.Root == null)
+            {
+                return;
+            }
+
+            if (view.MovementDuration <= 0f)
+            {
+                view.Root.transform.SetPositionAndRotation(
+                    view.TargetPosition,
+                    view.TargetRotation);
+                return;
+            }
+
+            var progress = Mathf.Clamp01(
+                (now - view.MovementStart) /
+                Mathf.Max(0.001f, view.MovementDuration));
+
+            // Translation stays linear across logical ticks. Reapplying an
+            // ease-in/ease-out curve per cell creates a visible stop-and-burst
+            // cadence even at a high frame rate.
+            var position = Vector3.LerpUnclamped(
+                view.StartPosition,
+                view.TargetPosition,
+                progress);
+
+            // Rotate early in the cell transition without changing the
+            // authoritative grid path or introducing a movement turn radius.
+            var rotationProgress = Mathf.SmoothStep(
+                0f,
+                1f,
+                Mathf.Clamp01(progress * 3.5f));
+            var rotation = Quaternion.Slerp(
+                view.StartRotation,
+                view.TargetRotation,
+                rotationProgress);
+            view.Root.transform.SetPositionAndRotation(position, rotation);
         }
 
         private void CreateMaterials()
         {
+            CreateSpriteAssets();
             if (_floorMaterial != null)
             {
                 return;
             }
 
             _floorMaterial = CreateMaterial(
-                "Basalt Floor",
-                new Color(0.055f, 0.07f, 0.085f),
-                0.2f,
-                0.05f);
+                "Painted Mine Floor",
+                new Color(0.94f, 0.92f, 0.9f),
+                0.16f,
+                0.03f,
+                null,
+                Resources.Load<Texture2D>("Art/DrillSnakeMineFloor"),
+                new Vector2(15f, 10f));
             _softRockMaterial = CreateMaterial(
-                "Soft Rock",
-                new Color(0.28f, 0.22f, 0.18f),
-                0.15f,
-                0f);
+                "Drillable Sedimentary Rock",
+                new Color(0.82f, 0.72f, 0.62f),
+                0.12f,
+                0f,
+                null,
+                Resources.Load<Texture2D>("Art/DrillSnakeSoftRock"),
+                new Vector2(0.18f, 0.18f));
             _bedrockMaterial = CreateMaterial(
-                "Bedrock",
-                new Color(0.095f, 0.11f, 0.14f),
-                0.45f,
-                0.25f);
+                "Blue Black Bedrock",
+                new Color(0.68f, 0.75f, 0.86f),
+                0.22f,
+                0.02f,
+                null,
+                Resources.Load<Texture2D>("Art/DrillSnakeBedrock"),
+                new Vector2(0.18f, 0.18f));
             _refineryMaterial = CreateMaterial(
                 "Refinery Floor",
-                new Color(0.17f, 0.21f, 0.23f),
-                0.65f,
-                0.7f);
+                new Color(0.34f, 0.35f, 0.35f),
+                0.52f,
+                0.72f);
             _dockMaterial = CreateMaterial(
                 "Refinery Dock",
-                new Color(0.06f, 0.8f, 0.88f),
+                new Color(0.9f, 0.5f, 0.06f),
                 0.75f,
                 0.45f,
-                new Color(0.02f, 0.35f, 0.45f));
-            _headMaterial = CreateMaterial(
-                "Drill Head",
-                new Color(1f, 0.58f, 0.08f),
-                0.55f,
-                0.72f);
-            _chassisMaterial = CreateMaterial(
-                "Chassis",
-                new Color(0.18f, 0.52f, 0.62f),
-                0.5f,
-                0.55f);
-            _trackMaterial = CreateMaterial(
-                "Tracks",
-                new Color(0.035f, 0.045f, 0.055f),
-                0.15f,
-                0.2f);
-            _cargoFrameMaterial = CreateMaterial(
-                "Cargo Frame",
-                new Color(0.24f, 0.28f, 0.3f),
-                0.45f,
-                0.65f);
+                new Color(0.72f, 0.22f, 0.015f));
+            _refineryDarkMaterial = CreateMaterial(
+                "Refinery Dark Steel",
+                new Color(0.09f, 0.1f, 0.105f),
+                0.42f,
+                0.78f);
             _gridMaterial = CreateMaterial(
                 "Grid",
                 new Color(0.1f, 0.7f, 0.72f, 0.36f),
@@ -368,39 +466,37 @@ namespace DrillSnake
                 0f,
                 0f,
                 new Color(0.8f, 0.01f, 0.01f));
+        }
 
-            _oreMaterials[DrillSnakeOreType.Common] = CreateMaterial(
-                "Common Ore",
-                new Color(0.2f, 0.86f, 0.38f),
-                0.6f,
-                0.25f,
-                new Color(0.02f, 0.18f, 0.04f));
-            _oreMaterials[DrillSnakeOreType.Rare] = CreateMaterial(
-                "Rare Ore",
-                new Color(0.16f, 0.52f, 1f),
-                0.7f,
-                0.35f,
-                new Color(0.015f, 0.12f, 0.38f));
-            _oreMaterials[DrillSnakeOreType.VeryRare] = CreateMaterial(
-                "Very Rare Ore",
-                new Color(0.93f, 0.22f, 1f),
-                0.82f,
-                0.42f,
-                new Color(0.32f, 0.015f, 0.4f));
+        private void CreateSpriteAssets()
+        {
+            if (_headSprite != null)
+            {
+                return;
+            }
+
+            var machineAtlas = Resources.Load<Texture2D>("Art/DrillSnakeMachineAtlas");
+            _headSprite = CreateAtlasSprite(machineAtlas, 0, 1, "Illustrated Drill Head");
+            _chassisSprite = CreateAtlasSprite(machineAtlas, 1, 1, "Illustrated Chassis");
+            _cargoSprite = CreateAtlasSprite(machineAtlas, 0, 0, "Illustrated Cargo Wagon");
+            _refinerySprite = CreateAtlasSprite(machineAtlas, 1, 0, "Illustrated Refinery");
+
+            var oreAtlas = Resources.Load<Texture2D>("Art/DrillSnakeOreAtlas");
+            _commonOreSprite = CreateAtlasSprite(oreAtlas, 0, 1, "Illustrated Common Ore");
+            _rareOreSprite = CreateAtlasSprite(oreAtlas, 1, 1, "Illustrated Rare Ore");
+            _veryRareOreSprite = CreateAtlasSprite(oreAtlas, 0, 0, "Illustrated Very Rare Ore");
+            _lampSprite = CreateAtlasSprite(oreAtlas, 1, 0, "Illustrated Mine Lamp");
         }
 
         private void CreateBaseFloor()
         {
             var floor = CreatePrimitive(
                 PrimitiveType.Plane,
-                "Excavation Floor",
+                "Painted Excavation Floor",
                 _worldRoot,
                 _floorMaterial);
-            floor.transform.position = new Vector3(0f, -0.08f, 0f);
-            floor.transform.localScale = new Vector3(
-                _map.Width / 10f,
-                1f,
-                _map.Height / 10f);
+            floor.transform.position = new Vector3(0f, -0.11f, 2f);
+            floor.transform.localScale = new Vector3(9.2f, 1f, 6.2f);
         }
 
         private void CreateCellVisual(Vector2Int cell, DrillSnakeCellType type)
@@ -439,42 +535,46 @@ namespace DrillSnake
             float height,
             float footprint)
         {
-            var rock = CreatePrimitive(
+            var root = new GameObject($"{name} {cell.x},{cell.y}");
+            root.transform.SetParent(_worldRoot, false);
+            root.transform.position = GridToWorld(cell);
+            root.transform.rotation = Quaternion.Euler(0f, HashAngle(cell), 0f);
+
+            var baseRock = CreatePrimitive(
                 PrimitiveType.Cube,
-                $"{name} {cell.x},{cell.y}",
-                _worldRoot,
+                "Packed Rock Base",
+                root.transform,
                 material);
-            rock.transform.position = GridToWorld(cell, height * 0.5f);
-            rock.transform.localScale = new Vector3(footprint, height, footprint);
-            rock.transform.rotation = Quaternion.Euler(
-                0f,
-                HashAngle(cell),
-                0f);
-            _solidCells[cell] = rock;
+            var heightVariation = 0.88f + Hash01(cell, 17) * 0.2f;
+            baseRock.transform.localPosition = new Vector3(0f, height * 0.39f, 0f);
+            baseRock.transform.localScale = new Vector3(
+                footprint + 0.045f,
+                height * 0.78f * heightVariation,
+                footprint + 0.045f);
+
+            _solidCells[cell] = root;
         }
 
         private void CreateOre(Vector2Int cell, DrillSnakeOreType oreType)
         {
             var root = new GameObject($"{oreType} Ore {cell.x},{cell.y}");
             root.transform.SetParent(_worldRoot, false);
-            root.transform.position = GridToWorld(cell);
+            root.transform.position = GridToWorld(cell, 0.66f);
+            root.transform.rotation = Quaternion.Euler(0f, HashAngle(cell), 0f);
 
-            var baseRock = CreatePrimitive(
-                PrimitiveType.Cube,
-                "Ore Matrix",
+            var sprite = oreType switch
+            {
+                DrillSnakeOreType.Common => _commonOreSprite,
+                DrillSnakeOreType.Rare => _rareOreSprite,
+                _ => _veryRareOreSprite
+            };
+            CreateWorldSprite(
+                "Painted Ore Cluster",
                 root.transform,
-                _softRockMaterial);
-            baseRock.transform.localPosition = new Vector3(0f, 0.28f, 0f);
-            baseRock.transform.localScale = new Vector3(0.92f, 0.55f, 0.92f);
+                sprite,
+                1.22f,
+                8);
 
-            var crystal = CreatePrimitive(
-                PrimitiveType.Sphere,
-                "Exposed Ore",
-                root.transform,
-                _oreMaterials[oreType]);
-            crystal.transform.localPosition = new Vector3(0f, 0.68f, 0f);
-            crystal.transform.localScale = new Vector3(0.44f, 0.62f, 0.44f);
-            crystal.transform.rotation = Quaternion.Euler(12f, HashAngle(cell), 8f);
             _solidCells[cell] = root;
         }
 
@@ -497,11 +597,89 @@ namespace DrillSnake
         {
             var beacon = CreatePrimitive(
                 PrimitiveType.Cylinder,
-                "Dock Beacon",
+                "Dock Hazard Ring",
                 _worldRoot,
                 _dockMaterial);
-            beacon.transform.position = GridToWorld(cell, 0.13f);
-            beacon.transform.localScale = new Vector3(0.36f, 0.09f, 0.36f);
+            beacon.transform.position = GridToWorld(cell, 0.14f);
+            beacon.transform.localScale = new Vector3(0.43f, 0.07f, 0.43f);
+
+            var center = CreatePrimitive(
+                PrimitiveType.Cylinder,
+                "Dock Recess",
+                _worldRoot,
+                _refineryDarkMaterial);
+            center.transform.position = GridToWorld(cell, 0.2f);
+            center.transform.localScale = new Vector3(0.25f, 0.075f, 0.25f);
+        }
+
+        private void CreateRefinerySetDressing()
+        {
+            var refineryRoot = new GameObject("Industrial Refinery Dressing");
+            refineryRoot.transform.SetParent(_worldRoot, false);
+            refineryRoot.transform.position = GridToWorld(_map.Center, 0.42f);
+            CreateWorldSprite(
+                "Painted Refinery Platform",
+                refineryRoot.transform,
+                _refinerySprite,
+                3.65f,
+                3);
+        }
+
+        private void CreateMineLamps()
+        {
+            var lampRoot = new GameObject("Warm Mine Lamps");
+            lampRoot.transform.SetParent(_worldRoot, false);
+            var created = 0;
+            foreach (var room in _map.Graph.Rooms)
+            {
+                if (room.Kind == DrillSnakeRoomKind.Refinery ||
+                    room.Id % 2 == 0 ||
+                    created >= 6)
+                {
+                    continue;
+                }
+
+                var lampCell = FindLampCell(room);
+                CreateMineLamp(lampRoot.transform, lampCell);
+                created++;
+            }
+        }
+
+        private Vector2Int FindLampCell(DrillSnakeRoom room)
+        {
+            for (var x = room.Bounds.xMin; x < room.Bounds.xMax; x++)
+            {
+                var above = new Vector2Int(x, room.Bounds.yMax);
+                if (_map.GetCell(above) == DrillSnakeCellType.Bedrock)
+                {
+                    return above;
+                }
+            }
+
+            return room.Center;
+        }
+
+        private void CreateMineLamp(Transform parent, Vector2Int cell)
+        {
+            var root = new GameObject($"Mine Lamp {cell.x},{cell.y}");
+            root.transform.SetParent(parent, false);
+            root.transform.position = GridToWorld(cell, 0.74f);
+            CreateWorldSprite(
+                "Painted Wall Lantern",
+                root.transform,
+                _lampSprite,
+                1.35f,
+                12);
+
+            var lightObject = new GameObject("Warm Point Light");
+            lightObject.transform.SetParent(root.transform, false);
+            lightObject.transform.localPosition = new Vector3(0f, 1.2f, 0f);
+            var pointLight = lightObject.AddComponent<Light>();
+            pointLight.type = LightType.Point;
+            pointLight.color = new Color(1f, 0.47f, 0.12f);
+            pointLight.intensity = 2.4f;
+            pointLight.range = 5.5f;
+            pointLight.shadows = LightShadows.None;
         }
 
         private void CreateGridOverlay()
@@ -695,83 +873,28 @@ namespace DrillSnake
             };
         }
 
-        private SegmentView CreateSegmentView(int index, DrillSnakeOreType oreType)
+        private SegmentView CreateSegmentView(int index)
         {
             var root = new GameObject(index == 0 ? "Drill Head" : $"Snake Segment {index}");
             root.transform.SetParent(_worldRoot, false);
-            Renderer accentRenderer = null;
-
-            if (index == 0)
-            {
-                var body = CreatePrimitive(
-                    PrimitiveType.Cube,
-                    "Drill Cab",
-                    root.transform,
-                    _headMaterial);
-                body.transform.localPosition = new Vector3(0f, 0.36f, 0f);
-                body.transform.localScale = new Vector3(0.72f, 0.48f, 0.76f);
-
-                var drill = CreatePrimitive(
-                    PrimitiveType.Cylinder,
-                    "Drill Bit",
-                    root.transform,
-                    _headMaterial);
-                drill.transform.localPosition = new Vector3(0f, 0.34f, 0.52f);
-                drill.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
-                drill.transform.localScale = new Vector3(0.28f, 0.2f, 0.28f);
-            }
-            else if (index < DrillSnakeSimulation.MinimumSegmentCount)
-            {
-                var chassis = CreatePrimitive(
-                    PrimitiveType.Cube,
-                    "Permanent Chassis",
-                    root.transform,
-                    _chassisMaterial);
-                chassis.transform.localPosition = new Vector3(0f, 0.31f, 0f);
-                chassis.transform.localScale = new Vector3(0.65f, 0.4f, 0.72f);
-                CreateTracks(root.transform);
-            }
-            else
-            {
-                var frame = CreatePrimitive(
-                    PrimitiveType.Cube,
-                    "Cargo Frame",
-                    root.transform,
-                    _cargoFrameMaterial);
-                frame.transform.localPosition = new Vector3(0f, 0.27f, 0f);
-                frame.transform.localScale = new Vector3(0.69f, 0.3f, 0.69f);
-                CreateTracks(root.transform);
-
-                var cargo = CreatePrimitive(
-                    PrimitiveType.Sphere,
-                    "Cargo Ore",
-                    root.transform,
-                    _oreMaterials[oreType]);
-                cargo.transform.localPosition = new Vector3(0f, 0.62f, 0f);
-                cargo.transform.localScale = new Vector3(0.48f, 0.58f, 0.48f);
-                cargo.transform.localRotation = Quaternion.Euler(8f, 45f, 8f);
-                accentRenderer = cargo.GetComponent<Renderer>();
-            }
+            var sprite = index == 0
+                ? _headSprite
+                : index < DrillSnakeSimulation.MinimumSegmentCount
+                    ? _chassisSprite
+                    : _cargoSprite;
+            var scale = index == 0 ? 1.5f : 1.22f;
+            var artworkRenderer = CreateWorldSprite(
+                index == 0 ? "Painted Drill Vehicle" : "Painted Snake Module",
+                root.transform,
+                sprite,
+                scale,
+                24 - Mathf.Min(index, 12));
 
             return new SegmentView
             {
                 Root = root,
-                AccentRenderer = accentRenderer
+                Artwork = artworkRenderer.transform
             };
-        }
-
-        private void CreateTracks(Transform parent)
-        {
-            for (var side = -1; side <= 1; side += 2)
-            {
-                var track = CreatePrimitive(
-                    PrimitiveType.Cube,
-                    side < 0 ? "Left Track" : "Right Track",
-                    parent,
-                    _trackMaterial);
-                track.transform.localPosition = new Vector3(side * 0.36f, 0.16f, 0f);
-                track.transform.localScale = new Vector3(0.13f, 0.2f, 0.78f);
-            }
         }
 
         private IEnumerator ShrinkAndDestroy(GameObject target, float duration)
@@ -790,6 +913,49 @@ namespace DrillSnake
             {
                 Destroy(target);
             }
+        }
+
+        private static SpriteRenderer CreateWorldSprite(
+            string name,
+            Transform parent,
+            Sprite sprite,
+            float scale,
+            int sortingOrder)
+        {
+            var spriteObject = new GameObject(name);
+            spriteObject.transform.SetParent(parent, false);
+            spriteObject.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            spriteObject.transform.localScale = Vector3.one * scale;
+            var renderer = spriteObject.AddComponent<SpriteRenderer>();
+            renderer.sprite = sprite;
+            renderer.sortingOrder = sortingOrder;
+            return renderer;
+        }
+
+        private static Sprite CreateAtlasSprite(
+            Texture2D atlas,
+            int column,
+            int row,
+            string name)
+        {
+            if (atlas == null)
+            {
+                return null;
+            }
+
+            atlas.wrapMode = TextureWrapMode.Clamp;
+            atlas.filterMode = FilterMode.Bilinear;
+            var width = atlas.width / 2;
+            var height = atlas.height / 2;
+            var sprite = Sprite.Create(
+                atlas,
+                new Rect(column * width, row * height, width, height),
+                new Vector2(0.5f, 0.5f),
+                500f,
+                2u,
+                SpriteMeshType.FullRect);
+            sprite.name = name;
+            return sprite;
         }
 
         private static GameObject CreatePrimitive(
@@ -816,7 +982,9 @@ namespace DrillSnake
             Color color,
             float smoothness,
             float metallic,
-            Color? emission = null)
+            Color? emission = null,
+            Texture2D texture = null,
+            Vector2? textureScale = null)
         {
             var shader = Shader.Find("Universal Render Pipeline/Lit");
             if (shader == null)
@@ -844,6 +1012,27 @@ namespace DrillSnake
                 material.SetFloat("_Metallic", metallic);
             }
 
+            if (texture != null)
+            {
+                texture.wrapMode = TextureWrapMode.Repeat;
+                material.mainTexture = texture;
+                if (material.HasProperty("_BaseMap"))
+                {
+                    material.SetTexture("_BaseMap", texture);
+                    material.SetTextureScale(
+                        "_BaseMap",
+                        textureScale ?? Vector2.one);
+                }
+
+                if (material.HasProperty("_MainTex"))
+                {
+                    material.SetTexture("_MainTex", texture);
+                    material.SetTextureScale(
+                        "_MainTex",
+                        textureScale ?? Vector2.one);
+                }
+            }
+
             if (emission.HasValue && material.HasProperty("_EmissionColor"))
             {
                 material.EnableKeyword("_EMISSION");
@@ -855,13 +1044,21 @@ namespace DrillSnake
 
         private static float SegmentHeight(int index)
         {
-            return index == 0 ? 0.03f : 0.02f;
+            return index == 0 ? 0.82f : 0.78f;
         }
 
         private static float HashAngle(Vector2Int cell)
         {
             var hash = cell.x * 73856093 ^ cell.y * 19349663;
             return Mathf.Abs(hash % 4) * 90f;
+        }
+
+        private static float Hash01(Vector2Int cell, int salt)
+        {
+            var hash = cell.x * 73856093 ^
+                       cell.y * 19349663 ^
+                       salt * 83492791;
+            return Mathf.Abs(hash % 1000) / 999f;
         }
     }
 }

@@ -15,6 +15,8 @@ namespace DrillSnake
         private readonly List<Vector2Int> _segments = new();
         private readonly List<DrillSnakeCargo> _cargo = new();
         private readonly Queue<Vector2Int> _directionBuffer = new();
+        private readonly Dictionary<Vector2Int, int> _drillDamageByCell = new();
+        private readonly Dictionary<Vector2Int, DrillSnakeOreType> _brokenOreByCell = new();
         private bool _cargoBanked;
 
         public DrillSnakeSimulation(DrillSnakeMap map)
@@ -115,7 +117,8 @@ namespace DrillSnake
             int scannerLevel,
             int coolingLevel,
             bool boosting,
-            bool heatFree)
+            bool heatFree,
+            int drillMotorLevel = 0)
         {
             if (_directionBuffer.Count > 0)
             {
@@ -124,7 +127,12 @@ namespace DrillSnake
 
             var nextCell = Head + Direction;
             var cellType = Map.GetCell(nextCell);
-            var oreType = ToOreType(cellType);
+            var cellOreType = ToOreType(cellType);
+            var oreType = _brokenOreByCell.TryGetValue(
+                nextCell,
+                out var brokenOreType)
+                ? brokenOreType
+                : cellOreType;
             var willGrow = oreType != DrillSnakeOreType.None;
 
             if (cellType == DrillSnakeCellType.Bedrock || !Map.IsInBounds(nextCell))
@@ -141,10 +149,86 @@ namespace DrillSnake
                     nextCell);
             }
 
-            var drilled = cellType == DrillSnakeCellType.SoftRock || willGrow;
+            var drilled =
+                cellType == DrillSnakeCellType.SoftRock ||
+                cellOreType != DrillSnakeOreType.None;
+            var drillDamageDealt = 0;
             if (drilled)
             {
+                var durability = tuning.GetCellDurability(cellType);
+                var previousDamage = _drillDamageByCell.TryGetValue(
+                    nextCell,
+                    out var storedDamage)
+                    ? storedDamage
+                    : 0;
+                var damageDealt = Mathf.Min(
+                    tuning.GetDrillDamage(drillMotorLevel),
+                    durability - previousDamage);
+                drillDamageDealt = damageDealt;
+                var totalDamage = previousDamage + damageDealt;
+                var remainingDurability = Mathf.Max(0, durability - totalDamage);
+
+                if (remainingDurability > 0)
+                {
+                    _drillDamageByCell[nextCell] = totalDamage;
+                    if (!heatFree)
+                    {
+                        Heat += tuning.DrillingHeat;
+                    }
+
+                    if (Heat >= tuning.GetMaximumHeat(coolingLevel))
+                    {
+                        return new DrillSnakeStepResult(
+                            DrillSnakeStepOutcome.Overheated,
+                            nextCell,
+                            oreType,
+                            0,
+                            remainingDurability,
+                            damageDealt);
+                    }
+
+                    return new DrillSnakeStepResult(
+                        DrillSnakeStepOutcome.RockImpact,
+                        nextCell,
+                        oreType,
+                        0,
+                        remainingDurability,
+                        damageDealt);
+                }
+
+                _drillDamageByCell.Remove(nextCell);
                 Map.SetCell(nextCell, DrillSnakeCellType.OpenFloor);
+                if (oreType != DrillSnakeOreType.None)
+                {
+                    _brokenOreByCell[nextCell] = oreType;
+                }
+
+                if (!heatFree)
+                {
+                    Heat += tuning.DrillingHeat;
+                }
+
+                if (Heat >= tuning.GetMaximumHeat(coolingLevel))
+                {
+                    return new DrillSnakeStepResult(
+                        DrillSnakeStepOutcome.Overheated,
+                        nextCell,
+                        oreType,
+                        0,
+                        0,
+                        damageDealt);
+                }
+
+                // Breaking and entering are deliberately separate logical
+                // actions. Even the final point of damage produces a full
+                // rebuff; the next tick moves into the newly cleared cell.
+                return new DrillSnakeStepResult(
+                    DrillSnakeStepOutcome.RockImpact,
+                    nextCell,
+                    oreType,
+                    0,
+                    0,
+                    damageDealt);
             }
 
             _segments.Insert(0, nextCell);
@@ -152,6 +236,7 @@ namespace DrillSnake
             {
                 var value = tuning.GetOreValue(oreType, scannerLevel);
                 _cargo.Add(new DrillSnakeCargo(oreType, value));
+                _brokenOreByCell.Remove(nextCell);
                 _cargoBanked = false;
             }
             else
@@ -174,7 +259,9 @@ namespace DrillSnake
                     DrillSnakeStepOutcome.Overheated,
                     nextCell,
                     oreType,
-                    willGrow ? _cargo[_cargo.Count - 1].Value : 0);
+                    willGrow ? _cargo[_cargo.Count - 1].Value : 0,
+                    0,
+                    drillDamageDealt);
             }
 
             if (Map.GetCell(nextCell) == DrillSnakeCellType.RefineryDock)
@@ -188,12 +275,37 @@ namespace DrillSnake
                     DrillSnakeStepOutcome.CollectedOre,
                     nextCell,
                     oreType,
-                    _cargo[_cargo.Count - 1].Value);
+                    _cargo[_cargo.Count - 1].Value,
+                    0,
+                    drillDamageDealt);
             }
 
             return new DrillSnakeStepResult(
                 drilled ? DrillSnakeStepOutcome.Drilled : DrillSnakeStepOutcome.Moved,
-                nextCell);
+                nextCell,
+                DrillSnakeOreType.None,
+                0,
+                0,
+                drillDamageDealt);
+        }
+
+        public int GetRemainingDurability(
+            Vector2Int cell,
+            DrillSnakeTuning tuning)
+        {
+            var durability = tuning.GetCellDurability(Map.GetCell(cell));
+            if (durability <= 0)
+            {
+                return 0;
+            }
+
+            return Mathf.Max(
+                0,
+                durability - (_drillDamageByCell.TryGetValue(
+                    cell,
+                    out var damage)
+                    ? damage
+                    : 0));
         }
 
         public bool ConsumeTailCargo()

@@ -351,7 +351,7 @@ namespace DrillSnake.Tests
             var oreCell = simulation.Head + Vector2Int.right;
             map.SetCell(oreCell, DrillSnakeCellType.CommonOre);
 
-            var result = simulation.Step(tuning, 0, 0, false, true);
+            var result = RamUntilCellBreaks(simulation, tuning);
 
             Assert.That(result.Outcome, Is.EqualTo(DrillSnakeStepOutcome.CollectedOre));
             Assert.That(simulation.CargoCount, Is.EqualTo(1));
@@ -405,7 +405,7 @@ namespace DrillSnake.Tests
             var tuning = new DrillSnakeTuning();
             var oreCell = simulation.Head + Vector2Int.right;
             map.SetCell(oreCell, DrillSnakeCellType.VeryRareOre);
-            simulation.Step(tuning, 0, 0, false, true);
+            RamUntilCellBreaks(simulation, tuning);
 
             Assert.That(simulation.ConsumeTailCargo(), Is.True);
             Assert.That(simulation.ConsumeTailCargo(), Is.False);
@@ -427,7 +427,7 @@ namespace DrillSnake.Tests
                 map.SetCell(
                     simulation.Head + Vector2Int.right,
                     DrillSnakeCellType.CommonOre);
-                simulation.Step(tuning, 0, 0, false, true);
+                RamUntilCellBreaks(simulation, tuning);
             }
 
             Assert.That(simulation.CargoCount, Is.EqualTo(3));
@@ -466,12 +466,30 @@ namespace DrillSnake.Tests
             var simulation = new DrillSnakeSimulation(map);
             var tuning = new DrillSnakeTuning();
             var drillCell = simulation.Head + Vector2Int.right;
+            var originalHead = simulation.Head;
             map.SetCell(drillCell, DrillSnakeCellType.SoftRock);
 
-            var result = simulation.Step(tuning, 0, 0, false, true);
+            var impact = simulation.Step(tuning, 0, 0, false, true);
 
-            Assert.That(result.Outcome, Is.EqualTo(DrillSnakeStepOutcome.Drilled));
+            Assert.That(impact.Outcome, Is.EqualTo(DrillSnakeStepOutcome.RockImpact));
+            Assert.That(impact.Rebuffed, Is.True);
+            Assert.That(impact.DamageDealt, Is.EqualTo(1));
+            Assert.That(impact.RemainingDurability, Is.EqualTo(1));
+            Assert.That(simulation.Head, Is.EqualTo(originalHead));
+            Assert.That(map.GetCell(drillCell), Is.EqualTo(DrillSnakeCellType.SoftRock));
+
+            var breakingImpact = simulation.Step(tuning, 0, 0, false, true);
+            Assert.That(
+                breakingImpact.Outcome,
+                Is.EqualTo(DrillSnakeStepOutcome.RockImpact));
+            Assert.That(breakingImpact.Rebuffed, Is.True);
+            Assert.That(breakingImpact.RemainingDurability, Is.Zero);
             Assert.That(map.GetCell(drillCell), Is.EqualTo(DrillSnakeCellType.OpenFloor));
+            Assert.That(simulation.Head, Is.EqualTo(originalHead));
+
+            var result = simulation.Step(tuning, 0, 0, false, true);
+            Assert.That(result.Outcome, Is.EqualTo(DrillSnakeStepOutcome.Moved));
+            Assert.That(simulation.Head, Is.EqualTo(drillCell));
             Assert.That(simulation.CargoCount, Is.Zero);
         }
 
@@ -485,8 +503,30 @@ namespace DrillSnake.Tests
             var startingSegments = simulation.Segments.Count;
             map.SetCell(oreCell, DrillSnakeCellType.RareOre);
 
-            var result = simulation.Step(tuning, 0, 0, false, true);
+            var firstImpact = simulation.Step(tuning, 0, 0, false, true);
+            var secondImpact = simulation.Step(tuning, 0, 0, false, true);
 
+            Assert.That(
+                firstImpact.Outcome,
+                Is.EqualTo(DrillSnakeStepOutcome.RockImpact));
+            Assert.That(firstImpact.RemainingDurability, Is.EqualTo(2));
+            Assert.That(
+                secondImpact.Outcome,
+                Is.EqualTo(DrillSnakeStepOutcome.RockImpact));
+            Assert.That(secondImpact.RemainingDurability, Is.EqualTo(1));
+            Assert.That(simulation.Head, Is.Not.EqualTo(oreCell));
+            Assert.That(simulation.CargoCount, Is.Zero);
+
+            var breakingImpact = simulation.Step(tuning, 0, 0, false, true);
+            Assert.That(
+                breakingImpact.Outcome,
+                Is.EqualTo(DrillSnakeStepOutcome.RockImpact));
+            Assert.That(breakingImpact.RemainingDurability, Is.Zero);
+            Assert.That(simulation.Head, Is.Not.EqualTo(oreCell));
+            Assert.That(simulation.CargoCount, Is.Zero);
+            Assert.That(map.GetCell(oreCell), Is.EqualTo(DrillSnakeCellType.OpenFloor));
+
+            var result = simulation.Step(tuning, 0, 0, false, true);
             Assert.That(result.Outcome, Is.EqualTo(DrillSnakeStepOutcome.CollectedOre));
             Assert.That(map.GetCell(oreCell), Is.EqualTo(DrillSnakeCellType.OpenFloor));
             Assert.That(simulation.CargoCount, Is.EqualTo(1));
@@ -498,6 +538,108 @@ namespace DrillSnake.Tests
             simulation.Step(tuning, 0, 0, false, true);
             Assert.That(simulation.CargoCount, Is.EqualTo(1));
             Assert.That(simulation.Segments.Count, Is.EqualTo(startingSegments + 1));
+        }
+
+        [Test]
+        public void RockHealthControlsRamCountAndDamagePersistsThroughFailureReset()
+        {
+            var cellTypes = new[]
+            {
+                DrillSnakeCellType.SoftRock,
+                DrillSnakeCellType.CommonOre,
+                DrillSnakeCellType.RareOre,
+                DrillSnakeCellType.VeryRareOre
+            };
+            var expectedRams = new[] { 2, 2, 3, 4 };
+
+            for (var typeIndex = 0; typeIndex < cellTypes.Length; typeIndex++)
+            {
+                var map = DrillSnakeMap.Generate(240628 + typeIndex);
+                var simulation = new DrillSnakeSimulation(map);
+                var tuning = new DrillSnakeTuning();
+                var target = simulation.Head + Vector2Int.right;
+                var originalHead = simulation.Head;
+                map.SetCell(target, cellTypes[typeIndex]);
+
+                Assert.That(
+                    simulation.GetRemainingDurability(target, tuning),
+                    Is.EqualTo(expectedRams[typeIndex]));
+
+                DrillSnakeStepResult result = default;
+                for (var ram = 1; ram <= expectedRams[typeIndex]; ram++)
+                {
+                    result = simulation.Step(tuning, 0, 0, false, true);
+                    Assert.That(
+                        result.Outcome,
+                        Is.EqualTo(DrillSnakeStepOutcome.RockImpact));
+                    Assert.That(simulation.Head, Is.EqualTo(originalHead));
+                    Assert.That(
+                        result.RemainingDurability,
+                        Is.EqualTo(expectedRams[typeIndex] - ram));
+                }
+
+                Assert.That(result.Rebuffed, Is.True);
+                Assert.That(
+                    map.GetCell(target),
+                    Is.EqualTo(DrillSnakeCellType.OpenFloor));
+
+                var entry = simulation.Step(tuning, 0, 0, false, true);
+                Assert.That(entry.Rebuffed, Is.False);
+                Assert.That(simulation.Head, Is.EqualTo(target));
+            }
+
+            var persistenceMap = DrillSnakeMap.Generate(240700);
+            var persistenceSimulation = new DrillSnakeSimulation(persistenceMap);
+            var persistenceTuning = new DrillSnakeTuning();
+            var persistenceCell =
+                persistenceSimulation.Head + Vector2Int.right;
+            persistenceMap.SetCell(
+                persistenceCell,
+                DrillSnakeCellType.RareOre);
+
+            persistenceSimulation.Step(
+                persistenceTuning,
+                0,
+                0,
+                false,
+                true);
+            Assert.That(
+                persistenceSimulation.GetRemainingDurability(
+                    persistenceCell,
+                    persistenceTuning),
+                Is.EqualTo(2));
+
+            persistenceSimulation.ResetExpedition();
+
+            Assert.That(
+                persistenceSimulation.GetRemainingDurability(
+                    persistenceCell,
+                    persistenceTuning),
+                Is.EqualTo(2));
+
+            var upgradedImpact = persistenceSimulation.Step(
+                persistenceTuning,
+                0,
+                0,
+                false,
+                true,
+                1);
+            Assert.That(
+                upgradedImpact.Outcome,
+                Is.EqualTo(DrillSnakeStepOutcome.RockImpact));
+            Assert.That(upgradedImpact.RemainingDurability, Is.Zero);
+            Assert.That(upgradedImpact.DamageDealt, Is.EqualTo(2));
+
+            var collectedAfterRebuff = persistenceSimulation.Step(
+                persistenceTuning,
+                0,
+                0,
+                false,
+                true,
+                1);
+            Assert.That(
+                collectedAfterRebuff.Outcome,
+                Is.EqualTo(DrillSnakeStepOutcome.CollectedOre));
         }
 
         [Test]
@@ -529,7 +671,7 @@ namespace DrillSnake.Tests
             map.SetCell(
                 simulation.Head + Vector2Int.right,
                 DrillSnakeCellType.CommonOre);
-            simulation.Step(tuning, 0, 0, false, true);
+            RamUntilCellBreaks(simulation, tuning);
             MoveEastToDock(simulation, tuning);
             Assert.That(session.BankCargo(simulation), Is.EqualTo(15));
             while (simulation.ConsumeTailCargo())
@@ -539,7 +681,7 @@ namespace DrillSnake.Tests
             map.SetCell(
                 simulation.Head + Vector2Int.right,
                 DrillSnakeCellType.VeryRareOre);
-            simulation.Step(tuning, 0, 0, false, true);
+            RamUntilCellBreaks(simulation, tuning);
             Assert.That(simulation.CargoValue, Is.EqualTo(140));
             var creditsBeforeFailure = session.BankedCredits;
 
@@ -560,7 +702,7 @@ namespace DrillSnake.Tests
             var tuning = new DrillSnakeTuning();
             map.SetCell(simulation.Head + Vector2Int.right, DrillSnakeCellType.CommonOre);
 
-            var collected = simulation.Step(tuning, 0, 0, false, true);
+            var collected = RamUntilCellBreaks(simulation, tuning);
             Assert.That(collected.Outcome, Is.EqualTo(DrillSnakeStepOutcome.CollectedOre));
 
             DrillSnakeStepResult result = default;
@@ -635,6 +777,30 @@ namespace DrillSnake.Tests
 
             Assert.That(count, Is.GreaterThan(0));
             return total / count;
+        }
+
+        private static DrillSnakeStepResult RamUntilCellBreaks(
+            DrillSnakeSimulation simulation,
+            DrillSnakeTuning tuning,
+            int drillMotorLevel = 0)
+        {
+            for (var guard = 0; guard < 16; guard++)
+            {
+                var result = simulation.Step(
+                    tuning,
+                    0,
+                    0,
+                    false,
+                    true,
+                    drillMotorLevel);
+                if (result.Outcome != DrillSnakeStepOutcome.RockImpact)
+                {
+                    return result;
+                }
+            }
+
+            Assert.Fail("Destructible cell did not break within 16 impacts.");
+            return default;
         }
 
         private static bool HasFailure(

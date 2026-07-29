@@ -62,6 +62,7 @@ namespace DrillSnake
     public enum DrillSnakeStepOutcome
     {
         Moved,
+        RockImpact,
         Drilled,
         CollectedOre,
         Docked,
@@ -90,12 +91,16 @@ namespace DrillSnake
             DrillSnakeStepOutcome outcome,
             Vector2Int cell,
             DrillSnakeOreType oreType = DrillSnakeOreType.None,
-            int oreValue = 0)
+            int oreValue = 0,
+            int remainingDurability = 0,
+            int damageDealt = 0)
         {
             Outcome = outcome;
             Cell = cell;
             OreType = oreType;
             OreValue = oreValue;
+            RemainingDurability = remainingDurability;
+            DamageDealt = damageDealt;
         }
 
         public DrillSnakeStepOutcome Outcome { get; }
@@ -106,9 +111,17 @@ namespace DrillSnake
 
         public int OreValue { get; }
 
+        public int RemainingDurability { get; }
+
+        public int DamageDealt { get; }
+
+        public bool Rebuffed => Outcome == DrillSnakeStepOutcome.RockImpact;
+
         public bool ChangedTerrain =>
             Outcome == DrillSnakeStepOutcome.Drilled ||
-            Outcome == DrillSnakeStepOutcome.CollectedOre;
+            Outcome == DrillSnakeStepOutcome.CollectedOre ||
+            (Outcome == DrillSnakeStepOutcome.RockImpact &&
+             RemainingDurability == 0);
 
         public bool Failed =>
             Outcome == DrillSnakeStepOutcome.BodyCollision ||
