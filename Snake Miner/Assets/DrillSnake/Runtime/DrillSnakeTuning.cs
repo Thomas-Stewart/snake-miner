@@ -13,22 +13,26 @@ namespace DrillSnake
         [SerializeField, Range(0.01f, 0.2f)] private float speedUpgradeReduction = 0.018f;
         [SerializeField, Min(0.03f)] private float bankSegmentSeconds = 0.09f;
 
-        [Header("Drilling")]
-        [SerializeField, Min(1)] private int softRockHealth = 2;
+        [Header("Ore Integrity")]
         [SerializeField, Min(1)] private int commonOreHealth = 2;
         [SerializeField, Min(1)] private int rareOreHealth = 3;
         [SerializeField, Min(1)] private int veryRareOreHealth = 4;
-        [SerializeField, Min(1)] private int baseDrillDamage = 1;
-        [SerializeField, Min(0)] private int drillDamagePerLevel = 1;
-        [SerializeField, Min(0.1f)] private float impactRecoverySeconds = 0.3f;
-        [SerializeField, Range(0.5f, 1f)] private float recoilDurationFraction = 0.92f;
-        [SerializeField, Range(0.1f, 0.8f)] private float recoilDistance = 0.52f;
+
+        [Header("Turret and Pickups")]
+        [SerializeField, Min(1f)] private float turretRange = 5.5f;
+        [SerializeField, Min(0.1f)] private float turretFireInterval = 0.62f;
+        [SerializeField, Min(1)] private int turretDamage = 1;
+        [SerializeField, Min(0.05f)] private float projectileTravelSeconds = 0.26f;
+        [SerializeField, Range(0.1f, 0.6f)] private float projectileSize = 0.26f;
+        [SerializeField, Range(1, 6)] private int oreFragmentCount = 3;
+        [SerializeField, Range(0f, 3f)] private float orePickupRadius = 1.5f;
+        [SerializeField, Min(1f)] private float drillPowerupDuration = 10f;
 
         [Header("Heat")]
         [SerializeField, Min(1f)] private float baseMaximumHeat = 100f;
+        [SerializeField, Range(0f, 3f)] private float maximumHeatSpeedBonus = 1.4f;
         [SerializeField, Min(0f)] private float coolingUpgradeCapacity = 18f;
         [SerializeField, Min(0f)] private float movementHeat = 0.55f;
-        [SerializeField, Min(0f)] private float drillingHeat = 4.5f;
         [SerializeField, Min(0f)] private float cargoHeatPerSegment = 0.055f;
         [SerializeField, Min(0f)] private float boostHeat = 1.8f;
 
@@ -58,22 +62,40 @@ namespace DrillSnake
             return boosting ? heat + boostHeat : heat;
         }
 
-        public float DrillingHeat => drillingHeat;
-
-        public float GetMoveInterval(int driveSpeedLevel, bool boosting, bool slowTesting)
+        public float GetMoveInterval(
+            int driveSpeedLevel,
+            bool boosting,
+            bool slowTesting,
+            float heat = 0f)
         {
             var normalInterval = Mathf.Max(
                 0.07f,
                 movementTickSeconds - driveSpeedLevel * speedUpgradeReduction);
-            var interval = boosting ? Mathf.Min(normalInterval, boostTickSeconds) : normalInterval;
+            var baseInterval = boosting
+                ? Mathf.Min(normalInterval, boostTickSeconds)
+                : normalInterval;
+            var interval = Mathf.Max(
+                0.045f,
+                baseInterval / (1f + GetHeatSpeedBonus(heat)));
             return slowTesting ? interval * slowTestingMultiplier : interval;
+        }
+
+        public float GetHeatSpeedBonus(float heat)
+        {
+            return GetHeatRatio(heat) * maximumHeatSpeedBonus;
+        }
+
+        public float GetHeatRatio(float heat)
+        {
+            return Mathf.Clamp01(
+                Mathf.Max(0f, heat) /
+                Mathf.Max(1f, baseMaximumHeat));
         }
 
         public int GetCellDurability(DrillSnakeCellType cellType)
         {
             return cellType switch
             {
-                DrillSnakeCellType.SoftRock => softRockHealth,
                 DrillSnakeCellType.CommonOre => commonOreHealth,
                 DrillSnakeCellType.RareOre => rareOreHealth,
                 DrillSnakeCellType.VeryRareOre => veryRareOreHealth,
@@ -81,23 +103,21 @@ namespace DrillSnake
             };
         }
 
-        public int GetDrillDamage(int drillMotorLevel)
-        {
-            return baseDrillDamage +
-                   Mathf.Max(0, drillMotorLevel) * drillDamagePerLevel;
-        }
+        public float TurretRange => turretRange;
 
-        public float GetImpactInterval(float movementInterval)
-        {
-            return Mathf.Max(movementInterval, impactRecoverySeconds);
-        }
+        public float TurretFireInterval => turretFireInterval;
 
-        public float GetRecoilDuration(float impactInterval)
-        {
-            return Mathf.Min(impactInterval * recoilDurationFraction, 0.4f);
-        }
+        public int TurretDamage => turretDamage;
 
-        public float RecoilDistance => recoilDistance;
+        public float ProjectileTravelSeconds => projectileTravelSeconds;
+
+        public float ProjectileSize => projectileSize;
+
+        public int OreFragmentCount => oreFragmentCount;
+
+        public float OrePickupRadius => orePickupRadius;
+
+        public float DrillPowerupDuration => drillPowerupDuration;
 
         public int GetOreValue(DrillSnakeOreType oreType, int scannerLevel)
         {

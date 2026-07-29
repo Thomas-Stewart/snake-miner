@@ -168,19 +168,21 @@ MonoBehaviour:
     slowTestingMultiplier: 3
     speedUpgradeReduction: 0.018
     bankSegmentSeconds: 0.09
-    softRockHealth: 2
     commonOreHealth: 2
     rareOreHealth: 3
     veryRareOreHealth: 4
-    baseDrillDamage: 1
-    drillDamagePerLevel: 1
-    impactRecoverySeconds: 0.3
-    recoilDurationFraction: 0.92
-    recoilDistance: 0.52
+    turretRange: 5.5
+    turretFireInterval: 0.62
+    turretDamage: 1
+    projectileTravelSeconds: 0.26
+    projectileSize: 0.26
+    oreFragmentCount: 3
+    orePickupRadius: 1.5
+    drillPowerupDuration: 10
     baseMaximumHeat: 100
+    maximumHeatSpeedBonus: 1.4
     coolingUpgradeCapacity: 18
     movementHeat: 0.55
-    drillingHeat: 4.5
     cargoHeatPerSegment: 0.055
     boostHeat: 1.8
     commonOreValue: 15

@@ -64,5 +64,43 @@ namespace DrillSnake.Editor
                 $"({messages.Length} compiler message(s)).",
                 shader);
         }
+
+        [MenuItem("Tools/Drill Snake/Validate Runtime Presentation")]
+        public static void ValidateRuntimePresentation()
+        {
+            var modes = new[]
+            {
+                DrillSnakeArtMode.IllustratedPng,
+                DrillSnakeArtMode.ProceduralCel
+            };
+            foreach (var mode in modes)
+            {
+                var root = new GameObject($"Drill Snake {mode} Smoke Test");
+                try
+                {
+                    var map = DrillSnakeMap.Generate(240628);
+                    var simulation = new DrillSnakeSimulation(map);
+                    var view = root.AddComponent<DrillSnakeWorldView>();
+                    view.BuildWorld(map, mode);
+                    view.SyncSnake(simulation, 0f);
+                    view.SyncCollectibles(simulation);
+                    view.SetDrillPowerActive(true);
+                    if (!view.TryGetHeadVisualPosition(out _))
+                    {
+                        throw new System.InvalidOperationException(
+                            $"{mode} did not create a head visual.");
+                    }
+                }
+                finally
+                {
+                    Object.DestroyImmediate(root);
+                }
+            }
+
+            ValidateProceduralCelShader();
+            Debug.Log(
+                "Drill Snake PNG and Procedural Cel runtime presentations " +
+                "built successfully.");
+        }
     }
 }

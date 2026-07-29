@@ -10,19 +10,30 @@ namespace DrillSnake
     /// </summary>
     public sealed class DrillSnakeWorldView : MonoBehaviour
     {
+        private const int MovementPathSampleCount = 16;
+
         private sealed class SegmentView
         {
             public GameObject Root;
-            public Transform Artwork;
-            public Vector3 StartPosition;
+            public Renderer[] HeatRenderers;
+            public Vector3 PathStart;
+            public Vector3 PathControlA;
+            public Vector3 PathControlB;
             public Vector3 TargetPosition;
-            public Quaternion StartRotation;
-            public Quaternion TargetRotation;
+            public float[] PathDistances;
+            public float PathLength;
             public float MovementStart;
             public float MovementDuration;
+            public Vector3 PreviousDirection;
+            public bool HasPreviousDirection;
+            public bool PathInitialized;
+            public Transform Turret;
         }
 
         private readonly Dictionary<Vector2Int, GameObject> _solidCells = new();
+        private readonly Dictionary<Vector2Int, GameObject> _orePickupViews = new();
+        private readonly Dictionary<Vector2Int, GameObject> _drillPowerupViews = new();
+        private readonly HashSet<Vector2Int> _animatingPickupCells = new();
         private readonly List<SegmentView> _segmentViews = new();
 
         private DrillSnakeMap _map;
@@ -56,6 +67,7 @@ namespace DrillSnake
         private Material _rareZoneMaterial;
         private Material _veryRareZoneMaterial;
         private Material _validationFailureMaterial;
+        private Material _heatParticleMaterial;
         private Sprite _headSprite;
         private Sprite _chassisSprite;
         private Sprite _cargoSprite;
@@ -65,10 +77,22 @@ namespace DrillSnake
         private Sprite _veryRareOreSprite;
         private Sprite _lampSprite;
         private Mesh _drillConeMesh;
-        private Vector3 _recoilDirection;
-        private float _recoilStartTime;
-        private float _recoilDuration;
-        private float _recoilDistance;
+        private GameObject _drillAura;
+        private bool _drillAuraActive;
+        private float _heatTint;
+        private float _targetHeatTint;
+        private float _appliedHeatTint = -1f;
+        private ParticleSystem _steamParticles;
+        private ParticleSystem _smokeParticles;
+        private MaterialPropertyBlock _heatTintProperties;
+        private static readonly int HeatTintColorId =
+            Shader.PropertyToID("_HeatTintColor");
+        private static readonly int HeatTintStrengthId =
+            Shader.PropertyToID("_HeatTintStrength");
+        private static readonly int BaseColorId =
+            Shader.PropertyToID("_BaseColor");
+        private static readonly Color HotSnakeColor =
+            new(1f, 0.08f, 0.025f, 1f);
 
         public bool GridVisible => _gridVisible;
 
@@ -104,8 +128,14 @@ namespace DrillSnake
             }
 
             _solidCells.Clear();
+            _orePickupViews.Clear();
+            _drillPowerupViews.Clear();
+            _animatingPickupCells.Clear();
             _segmentViews.Clear();
-            _recoilDuration = 0f;
+            _drillAura = null;
+            _drillAuraActive = false;
+            _steamParticles = null;
+            _smokeParticles = null;
             if (materialsNeedRefresh)
             {
                 ReleaseMaterials();
@@ -159,6 +189,107 @@ namespace DrillSnake
             SetLevelDesignOverlayVisible(!LevelDesignOverlayVisible);
         }
 
+        public void SetDrillPowerActive(bool active)
+        {
+            _drillAuraActive = active;
+            if (_drillAura != null)
+            {
+                _drillAura.SetActive(active);
+            }
+        }
+
+        public void SetHeatTint(float normalizedHeat)
+        {
+            _targetHeatTint = Mathf.Clamp01(normalizedHeat);
+        }
+
+        public void SyncCollectibles(DrillSnakeSimulation simulation)
+        {
+            var activeOreCells = new HashSet<Vector2Int>();
+            foreach (var pair in simulation.OrePickups)
+            {
+                activeOreCells.Add(pair.Key);
+                if (!_orePickupViews.ContainsKey(pair.Key))
+                {
+                    _orePickupViews[pair.Key] = CreateOrePickupView(pair.Value);
+                }
+            }
+
+            RemoveMissingCollectibleViews(_orePickupViews, activeOreCells);
+
+            var activePowerupCells = new HashSet<Vector2Int>();
+            foreach (var cell in simulation.DrillPowerups)
+            {
+                activePowerupCells.Add(cell);
+                if (!_drillPowerupViews.ContainsKey(cell))
+                {
+                    _drillPowerupViews[cell] = CreateDrillPowerupView(cell);
+                }
+            }
+
+            RemoveMissingCollectibleViews(
+                _drillPowerupViews,
+                activePowerupCells);
+        }
+
+        public void PlayTurretShot(
+            DrillSnakeTurretResult result,
+            float travelSeconds,
+            float projectileSize)
+        {
+            if (!result.Fired || _segmentViews.Count == 0)
+            {
+                return;
+            }
+
+            var turret = _segmentViews[0].Turret;
+            if (turret != null)
+            {
+                var direction = GridToWorld(result.Target) -
+                                GridToWorld(result.Origin);
+                direction.y = 0f;
+                if (direction.sqrMagnitude > 0.001f)
+                {
+                    turret.rotation = Quaternion.LookRotation(
+                        direction,
+                        Vector3.up);
+                }
+            }
+
+            StartCoroutine(AnimateTurretShot(
+                result,
+                travelSeconds,
+                projectileSize));
+        }
+
+        public void PlayOreScatter(
+            Vector2Int source,
+            IReadOnlyList<DrillSnakeOrePickup> pickups)
+        {
+            foreach (var pickup in pickups)
+            {
+                if (_orePickupViews.ContainsKey(pickup.Cell))
+                {
+                    StartCoroutine(AnimateOreScatter(source, pickup.Cell));
+                }
+            }
+        }
+
+        public void PlayOreCollection(
+            Vector2Int source,
+            DrillSnakeOreType oreType)
+        {
+            if (!_orePickupViews.Remove(source, out var pickupView) ||
+                pickupView == null)
+            {
+                pickupView = CreateOrePickupView(
+                    new DrillSnakeOrePickup(source, oreType, 0));
+            }
+
+            _animatingPickupCells.Remove(source);
+            StartCoroutine(AnimateOreCollection(pickupView, oreType));
+        }
+
         public void RemoveDrilledCell(Vector2Int cell)
         {
             if (!_solidCells.Remove(cell, out var cellObject) || cellObject == null)
@@ -167,20 +298,6 @@ namespace DrillSnake
             }
 
             StartCoroutine(ShrinkAndDestroy(cellObject, 0.09f));
-        }
-
-        public void PlayDrillRecoil(
-            Vector2Int direction,
-            float duration,
-            float distance)
-        {
-            _recoilDirection = new Vector3(
-                -direction.x,
-                0f,
-                -direction.y);
-            _recoilStartTime = Time.time;
-            _recoilDuration = Mathf.Max(0.05f, duration);
-            _recoilDistance = Mathf.Max(0.05f, distance);
         }
 
         public void SyncSnake(DrillSnakeSimulation simulation, float movementDuration)
@@ -194,6 +311,7 @@ namespace DrillSnake
                 }
 
                 _segmentViews.RemoveAt(lastIndex);
+                _appliedHeatTint = -1f;
             }
 
             while (_segmentViews.Count < simulation.Segments.Count)
@@ -202,49 +320,37 @@ namespace DrillSnake
                 var view = CreateSegmentView(index, simulation);
                 var position = GridToWorld(simulation.Segments[index], SegmentHeight(index));
                 view.Root.transform.position = position;
-                view.StartPosition = position;
+                view.PathStart = position;
+                view.PathControlA = position;
+                view.PathControlB = position;
                 view.TargetPosition = position;
-                view.StartRotation = view.Root.transform.rotation;
-                view.TargetRotation = view.Root.transform.rotation;
+                if (index == 0)
+                {
+                    CreateHeatVentEffects(view.Root.transform);
+                }
+
                 _segmentViews.Add(view);
+                _appliedHeatTint = -1f;
             }
 
             var now = Time.time;
             for (var i = 0; i < _segmentViews.Count; i++)
             {
                 var view = _segmentViews[i];
-                ApplyInterpolatedPose(view, now);
-
                 var target = GridToWorld(simulation.Segments[i], SegmentHeight(i));
-                view.StartPosition = view.Root.transform.position;
-                view.TargetPosition = target;
-                view.StartRotation = view.Root.transform.rotation;
-                view.MovementStart = now;
-                view.MovementDuration = movementDuration;
-
-                var movement = target - view.StartPosition;
-                movement.y = 0f;
-                if (i == 0)
-                {
-                    var forward = new Vector3(
-                        simulation.Direction.x,
-                        0f,
-                        simulation.Direction.y);
-                    view.TargetRotation = Quaternion.LookRotation(forward, Vector3.up);
-                }
-                else if (movement.sqrMagnitude > 0.001f)
-                {
-                    view.TargetRotation = Quaternion.LookRotation(movement, Vector3.up);
-                }
-
                 if (movementDuration <= 0f)
                 {
-                    view.Root.transform.SetPositionAndRotation(
-                        view.TargetPosition,
-                        view.TargetRotation);
-                    view.StartPosition = view.TargetPosition;
-                    view.StartRotation = view.TargetRotation;
+                    var initialDirection = i == 0
+                        ? new Vector3(
+                            simulation.Direction.x,
+                            0f,
+                            simulation.Direction.y)
+                        : SegmentDirection(simulation, i);
+                    SnapMovementPath(view, target, initialDirection, now);
+                    continue;
                 }
+
+                BeginMovementPath(view, target, movementDuration, now);
             }
         }
 
@@ -294,6 +400,17 @@ namespace DrillSnake
         private void Update()
         {
             var now = Time.time;
+            _heatTint = Mathf.MoveTowards(
+                _heatTint,
+                _targetHeatTint,
+                Time.deltaTime * 1.7f);
+            if (Mathf.Abs(_heatTint - _appliedHeatTint) > 0.001f)
+            {
+                ApplyHeatTintToSnake(_heatTint);
+                UpdateHeatVentEffects(_heatTint);
+                _appliedHeatTint = _heatTint;
+            }
+
             foreach (var view in _segmentViews)
             {
                 if (view.Root == null || view.MovementDuration <= 0f)
@@ -301,90 +418,524 @@ namespace DrillSnake
                     continue;
                 }
 
-                ApplyInterpolatedPose(view, now);
+                ApplyMovementPath(view, now);
             }
 
-            ApplyDrillRecoil(now);
-        }
-
-        private void ApplyDrillRecoil(float now)
-        {
-            var strength = 0f;
-            if (_recoilDuration > 0f)
+            if (_drillAuraActive && _drillAura != null)
             {
-                var progress = Mathf.Clamp01(
-                    (now - _recoilStartTime) / _recoilDuration);
-                if (progress < 0.2f)
-                {
-                    strength = Mathf.SmoothStep(0f, 1f, progress / 0.2f);
-                }
-                else
-                {
-                    strength = 1f - Mathf.SmoothStep(
-                        0f,
-                        1f,
-                        (progress - 0.2f) / 0.8f);
-                }
-
-                if (progress >= 1f)
-                {
-                    _recoilDuration = 0f;
-                }
+                var pulse = 0.92f + Mathf.Sin(now * 12f) * 0.1f;
+                _drillAura.transform.localScale =
+                    new Vector3(pulse, 0.05f, pulse);
+                _drillAura.transform.Rotate(
+                    Vector3.up,
+                    110f * Time.deltaTime,
+                    Space.Self);
             }
 
-            var worldOffset = _recoilDirection * (_recoilDistance * strength);
-            for (var index = 0; index < _segmentViews.Count; index++)
+            foreach (var pair in _orePickupViews)
             {
-                var view = _segmentViews[index];
-                if (view.Root == null || view.Artwork == null)
+                if (pair.Value == null ||
+                    _animatingPickupCells.Contains(pair.Key))
                 {
                     continue;
                 }
 
-                view.Artwork.localPosition = index == 0
-                    ? view.Root.transform.InverseTransformVector(worldOffset)
-                    : Vector3.zero;
+                pair.Value.transform.position = GridToWorld(
+                    pair.Key,
+                    0.23f + Mathf.Sin(now * 5f + pair.Key.x) * 0.05f);
+                pair.Value.transform.Rotate(
+                    Vector3.up,
+                    80f * Time.deltaTime,
+                    Space.World);
+            }
+
+            foreach (var pair in _drillPowerupViews)
+            {
+                if (pair.Value == null)
+                {
+                    continue;
+                }
+
+                pair.Value.transform.position = GridToWorld(
+                    pair.Key,
+                    0.32f + Mathf.Sin(now * 4f + pair.Key.y) * 0.08f);
+                pair.Value.transform.Rotate(
+                    Vector3.up,
+                    55f * Time.deltaTime,
+                    Space.World);
             }
         }
 
-        private static void ApplyInterpolatedPose(SegmentView view, float now)
+        private void ApplyHeatTintToSnake(float strength)
+        {
+            // Unity can preserve an existing MonoBehaviour instance across a
+            // script hot reload. Newly added reference fields are null on that
+            // preserved instance even when they have a field initializer.
+            _heatTintProperties ??= new MaterialPropertyBlock();
+
+            foreach (var view in _segmentViews)
+            {
+                if (view.Root == null)
+                {
+                    continue;
+                }
+
+                view.HeatRenderers ??=
+                    view.Root.GetComponentsInChildren<Renderer>(true);
+                foreach (var renderer in view.HeatRenderers)
+                {
+                    if (renderer == null)
+                    {
+                        continue;
+                    }
+
+                    if (renderer is ParticleSystemRenderer)
+                    {
+                        continue;
+                    }
+
+                    if (renderer is SpriteRenderer spriteRenderer)
+                    {
+                        spriteRenderer.color = Color.Lerp(
+                            Color.white,
+                            new Color(1f, 0.28f, 0.2f, 1f),
+                            strength * 0.82f);
+                        continue;
+                    }
+
+                    var material = renderer.sharedMaterial;
+                    if (material == null)
+                    {
+                        continue;
+                    }
+
+                    _heatTintProperties.Clear();
+                    renderer.GetPropertyBlock(_heatTintProperties);
+                    if (material.HasProperty(HeatTintStrengthId))
+                    {
+                        _heatTintProperties.SetColor(
+                            HeatTintColorId,
+                            HotSnakeColor);
+                        _heatTintProperties.SetFloat(
+                            HeatTintStrengthId,
+                            strength);
+                    }
+                    else if (material.HasProperty(BaseColorId))
+                    {
+                        var baseColor = material.GetColor(BaseColorId);
+                        var heatedColor = new Color(
+                            Mathf.Max(0.78f, baseColor.r),
+                            baseColor.g * 0.22f,
+                            baseColor.b * 0.16f,
+                            baseColor.a);
+                        _heatTintProperties.SetColor(
+                            BaseColorId,
+                            Color.Lerp(
+                                baseColor,
+                                heatedColor,
+                                strength * 0.78f));
+                    }
+
+                    renderer.SetPropertyBlock(_heatTintProperties);
+                }
+            }
+        }
+
+        private void CreateHeatVentEffects(Transform head)
+        {
+            if (head == null)
+            {
+                return;
+            }
+
+            _steamParticles = CreateHeatVentParticleSystem(
+                head,
+                "High Heat Steam",
+                new Vector3(-0.18f, 0.48f, -0.12f),
+                new Color(0.72f, 0.88f, 1f, 0.72f),
+                0.95f,
+                0.72f,
+                0.2f,
+                0.28f);
+            _smokeParticles = CreateHeatVentParticleSystem(
+                head,
+                "Critical Heat Smoke",
+                new Vector3(0.18f, 0.46f, -0.16f),
+                new Color(0.13f, 0.105f, 0.095f, 0.78f),
+                1.55f,
+                0.48f,
+                0.3f,
+                0.42f);
+            UpdateHeatVentEffects(_heatTint);
+        }
+
+        private ParticleSystem CreateHeatVentParticleSystem(
+            Transform parent,
+            string name,
+            Vector3 localPosition,
+            Color startColor,
+            float lifetime,
+            float speed,
+            float minimumSize,
+            float maximumSize)
+        {
+            var effect = new GameObject(name);
+            // ParticleSystem begins playing immediately when added to an
+            // active object. Configure it while inactive so duration and the
+            // other startup-only properties can be changed without Unity
+            // issuing "system is still playing" warnings.
+            effect.SetActive(false);
+            effect.transform.SetParent(parent, false);
+            effect.transform.localPosition = localPosition;
+            effect.transform.localRotation = Quaternion.Euler(-90f, 0f, 0f);
+
+            var particles = effect.AddComponent<ParticleSystem>();
+            var main = particles.main;
+            main.playOnAwake = false;
+            main.loop = true;
+            main.duration = 2f;
+            main.simulationSpace = ParticleSystemSimulationSpace.World;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(
+                lifetime * 0.78f,
+                lifetime * 1.22f);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(
+                speed * 0.72f,
+                speed * 1.18f);
+            main.startSize = new ParticleSystem.MinMaxCurve(
+                minimumSize,
+                maximumSize);
+            main.startColor = startColor;
+            main.maxParticles = 48;
+
+            var emission = particles.emission;
+            emission.rateOverTime = 0f;
+
+            var shape = particles.shape;
+            shape.shapeType = ParticleSystemShapeType.Cone;
+            shape.angle = 16f;
+            shape.radius = 0.09f;
+            shape.radiusThickness = 1f;
+
+            var colorOverLifetime = particles.colorOverLifetime;
+            colorOverLifetime.enabled = true;
+            var fade = new Gradient();
+            fade.SetKeys(
+                new[]
+                {
+                    new GradientColorKey(Color.white, 0f),
+                    new GradientColorKey(Color.white, 1f)
+                },
+                new[]
+                {
+                    new GradientAlphaKey(0f, 0f),
+                    new GradientAlphaKey(0.88f, 0.12f),
+                    new GradientAlphaKey(0f, 1f)
+                });
+            colorOverLifetime.color =
+                new ParticleSystem.MinMaxGradient(fade);
+
+            var sizeOverLifetime = particles.sizeOverLifetime;
+            sizeOverLifetime.enabled = true;
+            sizeOverLifetime.size = new ParticleSystem.MinMaxCurve(
+                1f,
+                new AnimationCurve(
+                    new Keyframe(0f, 0.45f),
+                    new Keyframe(0.18f, 0.8f),
+                    new Keyframe(1f, 1.75f)));
+
+            var noise = particles.noise;
+            noise.enabled = true;
+            noise.quality = ParticleSystemNoiseQuality.Medium;
+            noise.strength = 0.18f;
+            noise.frequency = 0.42f;
+            noise.scrollSpeed = 0.3f;
+
+            var particleRenderer =
+                effect.GetComponent<ParticleSystemRenderer>();
+            particleRenderer.renderMode = ParticleSystemRenderMode.Billboard;
+            particleRenderer.sortingOrder = 30;
+            particleRenderer.sharedMaterial = GetHeatParticleMaterial();
+            effect.SetActive(true);
+            return particles;
+        }
+
+        private void UpdateHeatVentEffects(float heatRatio)
+        {
+            SetHeatVentEmission(
+                _steamParticles,
+                Mathf.InverseLerp(0.7f, 1f, heatRatio) * 17f);
+            SetHeatVentEmission(
+                _smokeParticles,
+                Mathf.InverseLerp(0.86f, 1f, heatRatio) * 10f);
+        }
+
+        private static void SetHeatVentEmission(
+            ParticleSystem particles,
+            float rate)
+        {
+            if (particles == null)
+            {
+                return;
+            }
+
+            var emission = particles.emission;
+            emission.rateOverTime = Mathf.Max(0f, rate);
+            if (rate > 0.01f)
+            {
+                if (!particles.isPlaying)
+                {
+                    particles.Play();
+                }
+            }
+            else if (particles.isPlaying)
+            {
+                particles.Stop(
+                    true,
+                    ParticleSystemStopBehavior.StopEmitting);
+            }
+        }
+
+        private Material GetHeatParticleMaterial()
+        {
+            if (_heatParticleMaterial != null)
+            {
+                return _heatParticleMaterial;
+            }
+
+            var shader = Shader.Find(
+                "Universal Render Pipeline/Particles/Unlit");
+            if (shader == null)
+            {
+                shader = Shader.Find("Particles/Standard Unlit");
+            }
+
+            if (shader == null)
+            {
+                shader = Shader.Find("Sprites/Default");
+            }
+
+            _heatParticleMaterial = new Material(shader)
+            {
+                name = "Heat Steam and Smoke Particles"
+            };
+            if (_heatParticleMaterial.HasProperty(BaseColorId))
+            {
+                _heatParticleMaterial.SetColor(BaseColorId, Color.white);
+            }
+
+            return _heatParticleMaterial;
+        }
+
+        private static Vector3 SegmentDirection(
+            DrillSnakeSimulation simulation,
+            int index)
+        {
+            if (index <= 0 || index >= simulation.Segments.Count)
+            {
+                return Vector3.forward;
+            }
+
+            var delta =
+                simulation.Segments[index - 1] -
+                simulation.Segments[index];
+            return new Vector3(delta.x, 0f, delta.y).normalized;
+        }
+
+        private static void SnapMovementPath(
+            SegmentView view,
+            Vector3 position,
+            Vector3 direction,
+            float now)
+        {
+            view.PathStart = position;
+            view.PathControlA = position;
+            view.PathControlB = position;
+            view.TargetPosition = position;
+            view.PathLength = 0f;
+            view.MovementStart = now;
+            view.MovementDuration = 0f;
+            view.PathInitialized = true;
+            if (direction.sqrMagnitude > 0.001f)
+            {
+                view.PreviousDirection = direction.normalized;
+                view.HasPreviousDirection = true;
+                view.Root.transform.SetPositionAndRotation(
+                    position,
+                    Quaternion.LookRotation(direction, Vector3.up));
+            }
+            else
+            {
+                view.Root.transform.position = position;
+            }
+        }
+
+        private static void BeginMovementPath(
+            SegmentView view,
+            Vector3 target,
+            float duration,
+            float now)
+        {
+            ApplyMovementPath(view, now);
+
+            var start = view.Root.transform.position;
+            var delta = target - start;
+            delta.y = 0f;
+            var distance = delta.magnitude;
+            view.PathStart = start;
+            view.TargetPosition = target;
+            view.MovementStart = now;
+            view.MovementDuration = Mathf.Max(0.001f, duration);
+            view.PathInitialized = true;
+            if (distance <= 0.0001f)
+            {
+                view.PathControlA = start;
+                view.PathControlB = target;
+                view.PathLength = 0f;
+                return;
+            }
+
+            var direction = delta / distance;
+            var isTurn =
+                view.HasPreviousDirection &&
+                Vector3.Dot(view.PreviousDirection, direction) < 0.999f;
+            if (isTurn)
+            {
+                var cornerRadius = Mathf.Min(0.2f, distance * 0.2f);
+                view.PathControlA =
+                    start + view.PreviousDirection * cornerRadius;
+                view.PathControlB =
+                    target - direction * cornerRadius;
+            }
+            else
+            {
+                view.PathControlA =
+                    Vector3.LerpUnclamped(start, target, 1f / 3f);
+                view.PathControlB =
+                    Vector3.LerpUnclamped(start, target, 2f / 3f);
+            }
+
+            view.PreviousDirection = direction;
+            view.HasPreviousDirection = true;
+            BuildMovementDistanceTable(view);
+        }
+
+        private static void BuildMovementDistanceTable(SegmentView view)
+        {
+            view.PathDistances ??= new float[MovementPathSampleCount + 1];
+            view.PathDistances[0] = 0f;
+            var previous = view.PathStart;
+            var total = 0f;
+            for (var sample = 1;
+                 sample <= MovementPathSampleCount;
+                 sample++)
+            {
+                var curveTime = sample / (float)MovementPathSampleCount;
+                var point = EvaluateMovementCurve(view, curveTime);
+                total += Vector3.Distance(previous, point);
+                view.PathDistances[sample] = total;
+                previous = point;
+            }
+
+            view.PathLength = total;
+        }
+
+        private static void ApplyMovementPath(
+            SegmentView view,
+            float now)
         {
             if (view.Root == null)
             {
                 return;
             }
 
-            if (view.MovementDuration <= 0f)
+            if (!view.PathInitialized)
             {
-                view.Root.transform.SetPositionAndRotation(
-                    view.TargetPosition,
-                    view.TargetRotation);
+                SnapMovementPath(
+                    view,
+                    view.Root.transform.position,
+                    view.Root.transform.forward,
+                    now);
                 return;
             }
 
-            var progress = Mathf.Clamp01(
-                (now - view.MovementStart) /
-                Mathf.Max(0.001f, view.MovementDuration));
+            if (view.MovementDuration <= 0f)
+            {
+                view.Root.transform.position = view.TargetPosition;
+                return;
+            }
 
-            // Translation stays linear across logical ticks. Reapplying an
-            // ease-in/ease-out curve per cell creates a visible stop-and-burst
-            // cadence even at a high frame rate.
-            var position = Vector3.LerpUnclamped(
-                view.StartPosition,
-                view.TargetPosition,
-                progress);
-
-            // Rotate early in the cell transition without changing the
-            // authoritative grid path or introducing a movement turn radius.
-            var rotationProgress = Mathf.SmoothStep(
-                0f,
-                1f,
-                Mathf.Clamp01(progress * 3.5f));
-            var rotation = Quaternion.Slerp(
-                view.StartRotation,
-                view.TargetRotation,
-                rotationProgress);
+            var distanceProgress = Mathf.Clamp01(
+                (now - view.MovementStart) / view.MovementDuration);
+            var curveTime = DistanceProgressToCurveTime(
+                view,
+                distanceProgress);
+            var position = EvaluateMovementCurve(view, curveTime);
+            var tangent = EvaluateMovementTangent(view, curveTime);
+            tangent.y = 0f;
+            var rotation = tangent.sqrMagnitude > 0.0001f
+                ? Quaternion.LookRotation(tangent, Vector3.up)
+                : view.Root.transform.rotation;
             view.Root.transform.SetPositionAndRotation(position, rotation);
+        }
+
+        private static float DistanceProgressToCurveTime(
+            SegmentView view,
+            float distanceProgress)
+        {
+            if (view.PathLength <= 0.0001f ||
+                view.PathDistances == null)
+            {
+                return distanceProgress;
+            }
+
+            var targetDistance = distanceProgress * view.PathLength;
+            for (var sample = 1;
+                 sample <= MovementPathSampleCount;
+                 sample++)
+            {
+                if (view.PathDistances[sample] < targetDistance)
+                {
+                    continue;
+                }
+
+                var previousDistance = view.PathDistances[sample - 1];
+                var sampleLength =
+                    view.PathDistances[sample] - previousDistance;
+                var sampleProgress = sampleLength > 0.0001f
+                    ? (targetDistance - previousDistance) / sampleLength
+                    : 0f;
+                return (sample - 1f + sampleProgress) /
+                       MovementPathSampleCount;
+            }
+
+            return 1f;
+        }
+
+        private static Vector3 EvaluateMovementCurve(
+            SegmentView view,
+            float curveTime)
+        {
+            var inverse = 1f - curveTime;
+            return inverse * inverse * inverse * view.PathStart +
+                   3f * inverse * inverse * curveTime *
+                   view.PathControlA +
+                   3f * inverse * curveTime * curveTime *
+                   view.PathControlB +
+                   curveTime * curveTime * curveTime *
+                   view.TargetPosition;
+        }
+
+        private static Vector3 EvaluateMovementTangent(
+            SegmentView view,
+            float curveTime)
+        {
+            var inverse = 1f - curveTime;
+            return 3f * inverse * inverse *
+                   (view.PathControlA - view.PathStart) +
+                   6f * inverse * curveTime *
+                   (view.PathControlB - view.PathControlA) +
+                   3f * curveTime * curveTime *
+                   (view.TargetPosition - view.PathControlB);
         }
 
         private void CreateMaterials()
@@ -1107,8 +1658,16 @@ namespace DrillSnake
                 if (index == 0)
                 {
                     CreateProceduralDrillHead(artwork.transform);
+                    var turret = CreateTurret(artwork.transform, 0.33f, 1f);
+                    CreateDrillAura(artwork.transform, -0.23f);
+                    return new SegmentView
+                    {
+                        Root = root,
+                        Turret = turret
+                    };
                 }
-                else if (index < DrillSnakeSimulation.MinimumSegmentCount)
+
+                if (index < DrillSnakeSimulation.MinimumSegmentCount)
                 {
                     CreateProceduralChassis(artwork.transform, false, DrillSnakeOreType.None);
                 }
@@ -1124,8 +1683,7 @@ namespace DrillSnake
 
                 return new SegmentView
                 {
-                    Root = root,
-                    Artwork = artwork.transform
+                    Root = root
                 };
             }
 
@@ -1135,18 +1693,438 @@ namespace DrillSnake
                     ? _chassisSprite
                     : _cargoSprite;
             var scale = index == 0 ? 1.5f : 1.22f;
-            var artworkRenderer = CreateWorldSprite(
+            CreateWorldSprite(
                 index == 0 ? "Painted Drill Vehicle" : "Painted Snake Module",
                 root.transform,
                 sprite,
                 scale,
                 24 - Mathf.Min(index, 12));
+            Transform paintedTurret = null;
+            if (index == 0)
+            {
+                paintedTurret = CreateTurret(root.transform, 0.2f, 0.86f);
+                CreateDrillAura(root.transform, -0.65f);
+            }
 
             return new SegmentView
             {
                 Root = root,
-                Artwork = artworkRenderer.transform
+                Turret = paintedTurret
             };
+        }
+
+        private Transform CreateTurret(
+            Transform parent,
+            float localHeight,
+            float scale)
+        {
+            var turretRoot = new GameObject("Auto Turret").transform;
+            turretRoot.SetParent(parent, false);
+            turretRoot.localPosition = new Vector3(0f, localHeight, -0.03f);
+            turretRoot.localScale = Vector3.one * scale;
+
+            var baseObject = CreatePrimitive(
+                PrimitiveType.Cylinder,
+                "Turret Base",
+                turretRoot,
+                _refineryDarkMaterial);
+            baseObject.transform.localScale = new Vector3(0.25f, 0.08f, 0.25f);
+
+            var housing = CreatePrimitive(
+                PrimitiveType.Cube,
+                "Turret Housing",
+                turretRoot,
+                _dockMaterial);
+            housing.transform.localPosition = new Vector3(0f, 0.13f, 0.04f);
+            housing.transform.localScale = new Vector3(0.3f, 0.2f, 0.34f);
+
+            var barrel = CreatePrimitive(
+                PrimitiveType.Cube,
+                "Turret Barrel",
+                turretRoot,
+                _refineryMaterial);
+            barrel.transform.localPosition = new Vector3(0f, 0.14f, 0.34f);
+            barrel.transform.localScale = new Vector3(0.1f, 0.1f, 0.48f);
+
+            var muzzle = CreatePrimitive(
+                PrimitiveType.Cylinder,
+                "Turret Muzzle",
+                turretRoot,
+                _dockMaterial);
+            muzzle.transform.localPosition = new Vector3(0f, 0.14f, 0.59f);
+            muzzle.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            muzzle.transform.localScale = new Vector3(0.11f, 0.08f, 0.11f);
+            return turretRoot;
+        }
+
+        private void CreateDrillAura(Transform parent, float localHeight)
+        {
+            _drillAura = CreatePrimitive(
+                PrimitiveType.Cylinder,
+                "Active Drill Aura",
+                parent,
+                _dockMaterial);
+            _drillAura.transform.localPosition =
+                new Vector3(0f, localHeight, 0.05f);
+            _drillAura.transform.localScale = new Vector3(0.94f, 0.05f, 0.94f);
+            _drillAura.SetActive(_drillAuraActive);
+        }
+
+        private GameObject CreateOrePickupView(DrillSnakeOrePickup pickup)
+        {
+            var root = new GameObject(
+                $"{pickup.OreType} Ore Fragment {pickup.Cell.x},{pickup.Cell.y}");
+            root.transform.SetParent(_worldRoot, false);
+            root.transform.position = GridToWorld(pickup.Cell, 0.23f);
+
+            if (_artMode == DrillSnakeArtMode.IllustratedPng)
+            {
+                var sprite = pickup.OreType switch
+                {
+                    DrillSnakeOreType.Rare => _rareOreSprite,
+                    DrillSnakeOreType.VeryRare => _veryRareOreSprite,
+                    _ => _commonOreSprite
+                };
+                CreateWorldSprite(
+                    "Painted Ore Fragment",
+                    root.transform,
+                    sprite,
+                    0.48f,
+                    28);
+                return root;
+            }
+
+            var crystal = CreatePrimitive(
+                PrimitiveType.Cube,
+                "Cel Ore Fragment",
+                root.transform,
+                GetOreMaterial(pickup.OreType));
+            crystal.transform.localRotation = Quaternion.Euler(18f, 45f, 12f);
+            crystal.transform.localScale = new Vector3(0.22f, 0.34f, 0.22f);
+
+            var shadow = CreatePrimitive(
+                PrimitiveType.Cylinder,
+                "Fragment Shadow",
+                root.transform,
+                _outlineMaterial);
+            shadow.transform.localPosition = new Vector3(0f, -0.2f, 0f);
+            shadow.transform.localScale = new Vector3(0.22f, 0.025f, 0.22f);
+            return root;
+        }
+
+        private GameObject CreateDrillPowerupView(Vector2Int cell)
+        {
+            var root = new GameObject($"Drill Charge {cell.x},{cell.y}");
+            root.transform.SetParent(_worldRoot, false);
+            root.transform.position = GridToWorld(cell, 0.32f);
+
+            var ring = CreatePrimitive(
+                PrimitiveType.Cylinder,
+                "Powerup Ring",
+                root.transform,
+                _dockMaterial);
+            ring.transform.localScale = new Vector3(0.42f, 0.08f, 0.42f);
+
+            var core = CreateMeshObject(
+                "Powerup Drill Bit",
+                root.transform,
+                GetDrillConeMesh(),
+                _artMode == DrillSnakeArtMode.ProceduralCel
+                    ? _steelLightMaterial
+                    : _refineryMaterial);
+            core.transform.localPosition = new Vector3(0f, 0.28f, 0f);
+            core.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            core.transform.localScale = new Vector3(0.3f, 0.3f, 0.48f);
+
+            var glowObject = new GameObject("Powerup Light");
+            glowObject.transform.SetParent(root.transform, false);
+            glowObject.transform.localPosition = new Vector3(0f, 0.4f, 0f);
+            var glow = glowObject.AddComponent<Light>();
+            glow.type = LightType.Point;
+            glow.color = new Color(1f, 0.38f, 0.04f);
+            glow.intensity = 1.8f;
+            glow.range = 3f;
+            glow.shadows = LightShadows.None;
+            return root;
+        }
+
+        private IEnumerator AnimateTurretShot(
+            DrillSnakeTurretResult result,
+            float travelSeconds,
+            float projectileSize)
+        {
+            var projectile = CreatePrimitive(
+                PrimitiveType.Sphere,
+                "Turret Projectile",
+                _worldRoot,
+                _artMode == DrillSnakeArtMode.ProceduralCel &&
+                _lampMaterial != null
+                    ? _lampMaterial
+                    : _dockMaterial);
+            var start = _segmentViews.Count > 0 &&
+                        _segmentViews[0].Root != null
+                ? _segmentViews[0].Root.transform.position +
+                  Vector3.up * 0.52f
+                : GridToWorld(result.Origin, 0.7f);
+            var end = GridToWorld(result.Target, 0.72f);
+            projectile.transform.position = start;
+            projectile.transform.localScale =
+                Vector3.one * Mathf.Max(0.1f, projectileSize);
+
+            var duration = Mathf.Max(0.05f, travelSeconds);
+            var elapsed = 0f;
+            while (elapsed < duration && projectile != null)
+            {
+                elapsed += Time.deltaTime;
+                var progress = Mathf.Clamp01(elapsed / duration);
+                projectile.transform.position = Vector3.Lerp(
+                    start,
+                    end,
+                    progress);
+                yield return null;
+            }
+
+            if (projectile != null)
+            {
+                projectile.transform.position = end;
+                projectile.transform.localScale =
+                    Vector3.one * Mathf.Max(0.35f, projectileSize * 1.65f);
+                yield return null;
+                Destroy(projectile);
+            }
+        }
+
+        private IEnumerator AnimateOreScatter(
+            Vector2Int source,
+            Vector2Int target)
+        {
+            if (!_orePickupViews.TryGetValue(target, out var pickupView) ||
+                pickupView == null)
+            {
+                yield break;
+            }
+
+            _animatingPickupCells.Add(target);
+            var start = GridToWorld(source, 0.72f);
+            var end = GridToWorld(target, 0.23f);
+            pickupView.transform.position = start;
+            const float duration = 0.34f;
+            var elapsed = 0f;
+            while (elapsed < duration && pickupView != null)
+            {
+                if (!_orePickupViews.TryGetValue(target, out var activeView) ||
+                    activeView != pickupView)
+                {
+                    _animatingPickupCells.Remove(target);
+                    yield break;
+                }
+
+                elapsed += Time.deltaTime;
+                var progress = Mathf.Clamp01(elapsed / duration);
+                var position = Vector3.Lerp(start, end, progress);
+                position.y += Mathf.Sin(progress * Mathf.PI) * 0.65f;
+                pickupView.transform.position = position;
+                pickupView.transform.Rotate(
+                    new Vector3(180f, 260f, 120f) * Time.deltaTime,
+                    Space.World);
+                yield return null;
+            }
+
+            _animatingPickupCells.Remove(target);
+            if (pickupView != null &&
+                _orePickupViews.TryGetValue(target, out var finalView) &&
+                finalView == pickupView)
+            {
+                pickupView.transform.position = end;
+            }
+        }
+
+        private IEnumerator AnimateOreCollection(
+            GameObject pickupView,
+            DrillSnakeOreType oreType)
+        {
+            if (pickupView == null)
+            {
+                yield break;
+            }
+
+            var start = pickupView.transform.position;
+            var startScale = pickupView.transform.localScale;
+            var target = start;
+            const float duration = 0.4f;
+            var elapsed = 0f;
+            while (elapsed < duration && pickupView != null)
+            {
+                elapsed += Time.deltaTime;
+                var progress = Mathf.Clamp01(elapsed / duration);
+                var eased = progress * progress * (3f - 2f * progress);
+                if (TryGetHeadVisualPosition(out var headPosition))
+                {
+                    target = headPosition + Vector3.up * 0.42f;
+                }
+
+                var position = Vector3.Lerp(start, target, eased);
+                position.y += Mathf.Sin(progress * Mathf.PI) * 0.55f;
+                pickupView.transform.position = position;
+                pickupView.transform.localScale = Vector3.Lerp(
+                    startScale,
+                    startScale * 0.42f,
+                    eased);
+                pickupView.transform.Rotate(
+                    new Vector3(420f, 720f, 300f) * Time.deltaTime,
+                    Space.World);
+                yield return null;
+            }
+
+            if (TryGetHeadVisualPosition(out var finalHeadPosition))
+            {
+                target = finalHeadPosition + Vector3.up * 0.42f;
+            }
+
+            if (pickupView != null)
+            {
+                pickupView.transform.position = target;
+                Destroy(pickupView);
+            }
+
+            StartCoroutine(AnimateOreCollectionFanfare(target, oreType));
+        }
+
+        private IEnumerator AnimateOreCollectionFanfare(
+            Vector3 position,
+            DrillSnakeOreType oreType)
+        {
+            if (_worldRoot == null)
+            {
+                yield break;
+            }
+
+            var effectRoot = new GameObject($"{oreType} Collection Fanfare");
+            effectRoot.transform.SetParent(_worldRoot, false);
+            effectRoot.transform.position = position;
+            var oreMaterial = GetOreMaterial(oreType);
+
+            var flash = CreatePrimitive(
+                PrimitiveType.Sphere,
+                "Collection Flash",
+                effectRoot.transform,
+                oreMaterial);
+            flash.transform.localScale = Vector3.one * 0.12f;
+
+            var ring = CreatePrimitive(
+                PrimitiveType.Cylinder,
+                "Collection Ring",
+                effectRoot.transform,
+                oreMaterial);
+            ring.transform.localPosition = Vector3.down * 0.18f;
+            ring.transform.localScale = new Vector3(0.12f, 0.025f, 0.12f);
+
+            const int particleCount = 12;
+            var particles = new GameObject[particleCount];
+            var directions = new Vector3[particleCount];
+            for (var index = 0; index < particleCount; index++)
+            {
+                var angle = index * Mathf.PI * 2f / particleCount;
+                directions[index] = new Vector3(
+                    Mathf.Cos(angle),
+                    0.45f + (index % 3) * 0.16f,
+                    Mathf.Sin(angle));
+                particles[index] = CreatePrimitive(
+                    index % 2 == 0
+                        ? PrimitiveType.Cube
+                        : PrimitiveType.Sphere,
+                    $"Collection Spark {index + 1}",
+                    effectRoot.transform,
+                    oreMaterial);
+                particles[index].transform.localScale =
+                    Vector3.one * (0.07f + (index % 3) * 0.012f);
+            }
+
+            var lightObject = new GameObject("Collection Flash Light");
+            lightObject.transform.SetParent(effectRoot.transform, false);
+            var flashLight = lightObject.AddComponent<Light>();
+            flashLight.type = LightType.Point;
+            flashLight.color = OreEffectColor(oreType);
+            flashLight.intensity = 3.4f;
+            flashLight.range = 3.2f;
+            flashLight.shadows = LightShadows.None;
+
+            const float duration = 0.48f;
+            var elapsed = 0f;
+            while (elapsed < duration && effectRoot != null)
+            {
+                elapsed += Time.deltaTime;
+                var progress = Mathf.Clamp01(elapsed / duration);
+                var fade = 1f - progress;
+                flash.transform.localScale =
+                    Vector3.one * Mathf.Lerp(0.12f, 0.72f, progress) * fade;
+                ring.transform.localScale = new Vector3(
+                    Mathf.Lerp(0.12f, 1.15f, progress),
+                    0.025f * fade,
+                    Mathf.Lerp(0.12f, 1.15f, progress));
+                ring.transform.Rotate(Vector3.up, 360f * Time.deltaTime);
+                flashLight.intensity = 3.4f * fade * fade;
+
+                for (var index = 0; index < particleCount; index++)
+                {
+                    var spark = particles[index];
+                    if (spark == null)
+                    {
+                        continue;
+                    }
+
+                    var direction = directions[index];
+                    spark.transform.localPosition =
+                        direction * (progress * 0.82f) +
+                        Vector3.down * (progress * progress * 0.52f);
+                    spark.transform.localScale =
+                        Vector3.one * (0.085f * fade);
+                    spark.transform.Rotate(
+                        new Vector3(420f, 680f, 260f) * Time.deltaTime,
+                        Space.Self);
+                }
+
+                yield return null;
+            }
+
+            if (effectRoot != null)
+            {
+                Destroy(effectRoot);
+            }
+        }
+
+        private static Color OreEffectColor(DrillSnakeOreType oreType)
+        {
+            return oreType switch
+            {
+                DrillSnakeOreType.Rare => new Color(0.08f, 0.68f, 1f),
+                DrillSnakeOreType.VeryRare => new Color(1f, 0.16f, 0.78f),
+                _ => new Color(1f, 0.42f, 0.04f)
+            };
+        }
+
+        private static void RemoveMissingCollectibleViews(
+            Dictionary<Vector2Int, GameObject> views,
+            HashSet<Vector2Int> activeCells)
+        {
+            var removed = new List<Vector2Int>();
+            foreach (var pair in views)
+            {
+                if (!activeCells.Contains(pair.Key))
+                {
+                    if (pair.Value != null)
+                    {
+                        Destroy(pair.Value);
+                    }
+
+                    removed.Add(pair.Key);
+                }
+            }
+
+            foreach (var cell in removed)
+            {
+                views.Remove(cell);
+            }
         }
 
         private void CreateProceduralDrillHead(Transform parent)
@@ -1591,7 +2569,14 @@ namespace DrillSnake
             var collider = primitive.GetComponent<Collider>();
             if (collider != null)
             {
-                Destroy(collider);
+                if (Application.isPlaying)
+                {
+                    Destroy(collider);
+                }
+                else
+                {
+                    DestroyImmediate(collider);
+                }
             }
 
             return primitive;
@@ -1624,7 +2609,8 @@ namespace DrillSnake
                 _commonZoneMaterial,
                 _rareZoneMaterial,
                 _veryRareZoneMaterial,
-                _validationFailureMaterial
+                _validationFailureMaterial,
+                _heatParticleMaterial
             };
             foreach (var material in materials)
             {
@@ -1658,6 +2644,7 @@ namespace DrillSnake
             _rareZoneMaterial = null;
             _veryRareZoneMaterial = null;
             _validationFailureMaterial = null;
+            _heatParticleMaterial = null;
         }
 
         private static Material CreateCelMaterial(

@@ -19,6 +19,7 @@ namespace DrillSnake
         private Text _objectiveText;
         private Text _debugText;
         private Text _messageText;
+        private Text _drillPowerText;
         private GameObject _debugPanel;
         private GameObject _upgradePanel;
         private float _messageHideTime;
@@ -44,6 +45,7 @@ namespace DrillSnake
             BuildStats();
             BuildDebugLegend();
             BuildMessage();
+            BuildDrillPowerStatus();
             BuildUpgradePanel();
         }
 
@@ -52,7 +54,7 @@ namespace DrillSnake
             int cargoCount,
             int cargoValue,
             float heat,
-            float maximumHeat,
+            float heatSpeedBonus,
             int requestedSeed,
             int acceptedSeed,
             string presetName,
@@ -64,6 +66,7 @@ namespace DrillSnake
             bool gridVisible,
             bool levelDesignOverlayVisible,
             DrillSnakeArtMode artMode,
+            float drillPowerRemaining,
             bool atRefinery,
             bool waitingToDepart,
             Func<DrillSnakeUpgradeType, int> getUpgradeLevel,
@@ -80,7 +83,7 @@ namespace DrillSnake
             _heatText.text =
                 "<size=16><color=#AEB4B8>HEAT</color></size>\n" +
                 $"<size=28>{Mathf.CeilToInt(heat)}</size>\n" +
-                $"<size=13><color=#F4B844>{Mathf.CeilToInt(maximumHeat)} MAX</color></size>";
+                $"<size=13><color=#F4B844>+{Mathf.RoundToInt(heatSpeedBonus * 100f)}% SPEED</color></size>";
 
             var debugFlags = string.Empty;
             if (slowTesting)
@@ -121,6 +124,8 @@ namespace DrillSnake
                 "<b>CONTROLS</b>\n" +
                 "WASD / ARROWS  Turn\n" +
                 "SPACE          Boost\n" +
+                "TURRET         Auto-targets nearby ore\n" +
+                "DRILL CHARGE   10s contact destruction\n" +
                 "F1 / F2 / F3  Easy / Medium / Hard\n" +
                 "N              New seed\n" +
                 "R              Reset active seed\n" +
@@ -138,7 +143,14 @@ namespace DrillSnake
                 slowTesting ||
                 heatFree);
 
-            _upgradePanel.SetActive(atRefinery);
+            _drillPowerText.gameObject.SetActive(drillPowerRemaining > 0f);
+            _drillPowerText.text =
+                $"DRILL CHARGE  {drillPowerRemaining:0.0}s\n" +
+                "<size=14>CONTACT DESTROYS ALL BLOCKS</size>";
+
+            // Hidden during this loop pass. The retained backing data makes a
+            // redesigned progression layer easy to restore later.
+            _upgradePanel.SetActive(false);
             SetArtMode(artMode);
             foreach (var pair in _upgradeButtons)
             {
@@ -220,7 +232,7 @@ namespace DrillSnake
             Stretch(_objectiveText.rectTransform, 16f);
             _objectiveText.text =
                 "<color=#F2F0E9>MINE ORE AND RETURN TO THE REFINERY</color>\n" +
-                "<size=15><color=#A9ADB0>Bring the entire cargo train home to bank its value.</color></size>";
+                "<size=15><color=#A9ADB0>Turret shatters ore. Collect fragments and bring the train home.</color></size>";
         }
 
         private void BuildStats()
@@ -302,6 +314,28 @@ namespace DrillSnake
             var outline = _messageText.gameObject.AddComponent<Outline>();
             outline.effectColor = new Color(0f, 0f, 0f, 0.85f);
             outline.effectDistance = new Vector2(2f, -2f);
+        }
+
+        private void BuildDrillPowerStatus()
+        {
+            _drillPowerText = CreateText(
+                "Drill Powerup Status",
+                transform,
+                21,
+                TextAnchor.MiddleCenter,
+                FontStyle.Bold);
+            SetRect(
+                _drillPowerText.rectTransform,
+                new Vector2(0.5f, 0.08f),
+                new Vector2(0.5f, 0.08f),
+                Vector2.zero,
+                new Vector2(420f, 62f),
+                new Vector2(0.5f, 0.5f));
+            _drillPowerText.color = new Color(1f, 0.6f, 0.08f);
+            var outline = _drillPowerText.gameObject.AddComponent<Outline>();
+            outline.effectColor = new Color(0.12f, 0.025f, 0f, 0.9f);
+            outline.effectDistance = new Vector2(2f, -2f);
+            _drillPowerText.gameObject.SetActive(false);
         }
 
         private void BuildUpgradePanel()

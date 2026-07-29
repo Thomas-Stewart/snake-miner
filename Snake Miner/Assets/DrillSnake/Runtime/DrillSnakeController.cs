@@ -10,6 +10,13 @@ namespace DrillSnake
     [DisallowMultipleComponent]
     public sealed class DrillSnakeController : MonoBehaviour
     {
+        private const float CameraPitchDegrees = 64f;
+        private const float CameraBaseOrthographicSize = 7.5f;
+        private const float CameraSizePerCargoSegment = 0.055f;
+        private const float CameraMaximumOrthographicSize = 11.25f;
+        private static readonly Vector3 CameraFollowOffset =
+            new(0f, 28f, -13.7f);
+
         [Header("Prototype")]
         [SerializeField] private int levelSeed = 240628;
         [SerializeField]
@@ -27,10 +34,11 @@ namespace DrillSnake
         private DrillSnakeWorldView _worldView;
         private DrillSnakeHud _hud;
         private Camera _camera;
-        private Vector3 _cameraVelocity;
+        private float _cameraZoomVelocity;
         private Vector3 _cameraLead;
         private Vector3 _cameraLeadVelocity;
         private float _nextMoveTime;
+        private float _nextTurretTime;
         private bool _expeditionMoving;
         private bool _busy;
         private bool _slowTesting;
@@ -55,6 +63,14 @@ namespace DrillSnake
 
         private void Update()
         {
+            if (_simulation != null)
+            {
+                _simulation.AdvanceTime(Time.deltaTime);
+                _worldView?.SetDrillPowerActive(_simulation.DrillActive);
+                _worldView?.SetHeatTint(
+                    tuning.GetHeatRatio(_simulation.Heat));
+            }
+
             var keyboard = Keyboard.current;
             if (keyboard != null)
             {
@@ -72,6 +88,11 @@ namespace DrillSnake
             if (!_busy && _expeditionMoving && Time.time >= _nextMoveTime)
             {
                 MoveOneCell(keyboard != null && keyboard.spaceKey.isPressed);
+            }
+
+            if (!_busy && _simulation != null && Time.time >= _nextTurretTime)
+            {
+                FireTurret();
             }
 
             UpdateHud();
@@ -108,8 +129,10 @@ namespace DrillSnake
             _simulation = new DrillSnakeSimulation(map);
             _worldView.BuildWorld(map, artMode);
             _worldView.SyncSnake(_simulation, 0f);
+            _worldView.SyncCollectibles(_simulation);
             SnapCameraToSnake();
             _nextMoveTime = Time.time;
+            _nextTurretTime = Time.time + 0.25f;
 
             if (announce)
             {
@@ -129,39 +152,41 @@ namespace DrillSnake
                 GetUpgradeLevel(DrillSnakeUpgradeType.OreScanner),
                 GetUpgradeLevel(DrillSnakeUpgradeType.Cooling),
                 boosting,
-                _heatFree,
-                GetUpgradeLevel(DrillSnakeUpgradeType.DrillMotor));
+                _heatFree);
 
             var interval = tuning.GetMoveInterval(
                 GetUpgradeLevel(DrillSnakeUpgradeType.DriveSpeed),
                 boosting,
-                _slowTesting);
-            if (result.Rebuffed)
-            {
-                interval = tuning.GetImpactInterval(interval);
-            }
-
+                _slowTesting,
+                _simulation.Heat);
             if (result.ChangedTerrain)
             {
                 _worldView.RemoveDrilledCell(result.Cell);
             }
 
-            if (result.Rebuffed)
+            if (result.Outcome == DrillSnakeStepOutcome.CollectedOre)
             {
-                _worldView.PlayDrillRecoil(
-                    _simulation.Direction,
-                    tuning.GetRecoilDuration(interval),
-                    tuning.RecoilDistance);
-                var materialName = result.OreType == DrillSnakeOreType.None
-                    ? "ROCK"
-                    : $"{OreName(result.OreType)} ORE";
+                _worldView.PlayOreCollection(
+                    result.CollectedPickupCell,
+                    result.OreType);
+            }
+
+            _worldView.SyncCollectibles(_simulation);
+            if (result.SpawnedPickups.Count > 0)
+            {
+                _worldView.PlayOreScatter(
+                    result.Cell,
+                    result.SpawnedPickups);
+            }
+
+            if (result.Outcome == DrillSnakeStepOutcome.Blocked)
+            {
+                _expeditionMoving = false;
+                _simulation.ClearDirectionBuffer();
                 _hud.ShowMessage(
-                    result.RemainingDurability == 0
-                        ? $"{materialName} BREAKS"
-                        : $"{materialName} RESISTS  •  INTEGRITY " +
-                          $"{result.RemainingDurability}",
+                    "PATH BLOCKED  •  FIND A ROUTE OR DRILL CHARGE",
                     new Color(1f, 0.58f, 0.16f),
-                    Mathf.Min(0.7f, interval * 1.8f));
+                    1.1f);
             }
 
             _worldView.SyncSnake(_simulation, interval);
@@ -175,6 +200,25 @@ namespace DrillSnake
                     0.85f);
             }
 
+            if (result.Outcome == DrillSnakeStepOutcome.CollectedDrillPowerup)
+            {
+                _hud.ShowMessage(
+                    $"DRILL CHARGE ACTIVE  •  " +
+                    $"{tuning.DrillPowerupDuration:0} SECONDS",
+                    new Color(1f, 0.58f, 0.08f),
+                    1.4f);
+            }
+
+            if (result.Outcome == DrillSnakeStepOutcome.Drilled)
+            {
+                _hud.ShowMessage(
+                    result.OreType == DrillSnakeOreType.None
+                        ? "DRILL CHARGE  •  BLOCK DESTROYED"
+                        : "DRILL CHARGE  •  ORE SHATTERED",
+                    new Color(1f, 0.68f, 0.12f),
+                    0.65f);
+            }
+
             if (result.Failed)
             {
                 StartCoroutine(FailureSequence(result.Outcome));
@@ -185,6 +229,37 @@ namespace DrillSnake
                 _simulation.CargoCount > 0)
             {
                 StartCoroutine(BankingSequence());
+            }
+        }
+
+        private void FireTurret()
+        {
+            var result = _simulation.TryFireTurret(
+                tuning,
+                GetUpgradeLevel(DrillSnakeUpgradeType.OreScanner));
+            if (!result.Fired)
+            {
+                _nextTurretTime = Time.time + 0.12f;
+                return;
+            }
+
+            _nextTurretTime = Time.time + tuning.TurretFireInterval;
+            _worldView.PlayTurretShot(
+                result,
+                tuning.ProjectileTravelSeconds,
+                tuning.ProjectileSize);
+            if (result.Destroyed)
+            {
+                _worldView.RemoveDrilledCell(result.Target);
+                _worldView.SyncCollectibles(_simulation);
+                _worldView.PlayOreScatter(
+                    result.Target,
+                    result.SpawnedPickups);
+                _hud.ShowMessage(
+                    $"{OreName(result.OreType)} ORE SHATTERED  •  " +
+                    $"{result.SpawnedPickups.Count} FRAGMENTS",
+                    OreColor(result.OreType),
+                    0.8f);
             }
         }
 
@@ -226,8 +301,6 @@ namespace DrillSnake
             var reason = outcome switch
             {
                 DrillSnakeStepOutcome.BodyCollision => "COLLIDED WITH YOUR OWN TRAIN",
-                DrillSnakeStepOutcome.BedrockCollision => "DRILL SHATTERED ON BEDROCK",
-                DrillSnakeStepOutcome.Overheated => "DRILL CORE OVERHEATED",
                 _ => "EXPEDITION FAILED"
             };
             _hud.ShowMessage(
@@ -267,6 +340,22 @@ namespace DrillSnake
 
         private void QueueDirection(Vector2Int direction)
         {
+            if (!_expeditionMoving)
+            {
+                // While stopped, a direction is a departure command rather
+                // than a buffered turn. TrySetDirection intentionally accepts
+                // the current forward direction, accepts either 90-degree
+                // direction, and rejects only the immediate reverse.
+                if (!_simulation.TrySetDirection(direction))
+                {
+                    return;
+                }
+
+                _expeditionMoving = true;
+                _nextMoveTime = Time.time;
+                return;
+            }
+
             if (!_simulation.QueueDirection(direction))
             {
                 return;
@@ -348,6 +437,7 @@ namespace DrillSnake
                 : DrillSnakeArtMode.IllustratedPng;
             _worldView.BuildWorld(_simulation.Map, artMode);
             _worldView.SyncSnake(_simulation, 0f);
+            _worldView.SyncCollectibles(_simulation);
             _hud.SetArtMode(artMode);
             _hud.ShowMessage(
                 artMode == DrillSnakeArtMode.ProceduralCel
@@ -415,7 +505,7 @@ namespace DrillSnake
                 _simulation.CargoCount,
                 _simulation.CargoValue,
                 _simulation.Heat,
-                tuning.GetMaximumHeat(GetUpgradeLevel(DrillSnakeUpgradeType.Cooling)),
+                tuning.GetHeatSpeedBonus(_simulation.Heat),
                 _simulation.Map.RequestedSeed,
                 levelSeed,
                 _simulation.Map.Settings.DisplayName,
@@ -427,6 +517,7 @@ namespace DrillSnake
                 _worldView.GridVisible,
                 _worldView.LevelDesignOverlayVisible,
                 artMode,
+                _simulation.DrillPowerRemaining,
                 _simulation.IsAtRefinery,
                 !_expeditionMoving && !_busy,
                 GetUpgradeLevel,
@@ -444,12 +535,15 @@ namespace DrillSnake
             }
 
             camera.orthographic = true;
-            camera.orthographicSize = 7.2f;
+            camera.orthographicSize = CameraBaseOrthographicSize;
             camera.nearClipPlane = 0.1f;
             camera.farClipPlane = 120f;
             camera.clearFlags = CameraClearFlags.SolidColor;
             camera.backgroundColor = new Color(0.008f, 0.01f, 0.012f);
-            camera.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+            camera.transform.rotation = Quaternion.Euler(
+                CameraPitchDegrees,
+                0f,
+                0f);
             return camera;
         }
 
@@ -460,10 +554,11 @@ namespace DrillSnake
                 return;
             }
 
-            _cameraVelocity = Vector3.zero;
+            _cameraZoomVelocity = 0f;
             _cameraLead = Vector3.zero;
             _cameraLeadVelocity = Vector3.zero;
             _camera.transform.position = GetCameraTarget();
+            _camera.orthographicSize = GetDesiredCameraSize();
         }
 
         private void UpdateCameraFollow()
@@ -488,13 +583,31 @@ namespace DrillSnake
                 4f,
                 deltaTime);
 
-            _camera.transform.position = Vector3.SmoothDamp(
-                _camera.transform.position,
-                GetCameraTarget(),
-                ref _cameraVelocity,
-                0.2f,
-                16f,
+            // The visual head already follows a continuous, constant-speed
+            // path. Lock the camera to that path so a second damping layer
+            // cannot turn cell boundaries into visible catch-up pulses.
+            _camera.transform.position = GetCameraTarget();
+            _camera.orthographicSize = Mathf.SmoothDamp(
+                _camera.orthographicSize,
+                GetDesiredCameraSize(),
+                ref _cameraZoomVelocity,
+                0.32f,
+                4f,
                 deltaTime);
+        }
+
+        private float GetDesiredCameraSize()
+        {
+            var cargoSegments = _simulation == null
+                ? 0
+                : Mathf.Max(
+                    0,
+                    _simulation.Segments.Count -
+                    DrillSnakeSimulation.MinimumSegmentCount);
+            return Mathf.Min(
+                CameraMaximumOrthographicSize,
+                CameraBaseOrthographicSize +
+                cargoSegments * CameraSizePerCargoSegment);
         }
 
         private Vector3 GetCameraTarget()
@@ -503,10 +616,11 @@ namespace DrillSnake
                         _worldView.TryGetHeadVisualPosition(out var visualPosition)
                 ? visualPosition
                 : DrillSnakeWorldView.GridToWorld(_simulation.Head);
-            return new Vector3(
+            var focus = new Vector3(
                 world.x + _cameraLead.x,
-                34f,
+                0f,
                 world.z + _cameraLead.z);
+            return focus + CameraFollowOffset;
         }
 
         private static void EnsureLighting()

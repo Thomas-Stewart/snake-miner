@@ -32,6 +32,7 @@ namespace DrillSnake
         private readonly DrillSnakeCellType[,] _cells;
         private readonly int[,] _graphDistances;
         private readonly List<Vector2Int> _docks = new();
+        private readonly List<Vector2Int> _drillPowerupCells = new();
         private readonly HashSet<Vector2Int> _routeCells = new();
         private readonly List<DrillSnakeValidationFailure> _rejectedFailures = new();
 
@@ -72,6 +73,9 @@ namespace DrillSnake
 
         public IReadOnlyList<Vector2Int> Docks => _docks;
 
+        public IReadOnlyList<Vector2Int> DrillPowerupCells =>
+            _drillPowerupCells;
+
         public DrillSnakeLevelGraph Graph { get; }
 
         public DrillSnakeValidationReport ValidationReport { get; private set; }
@@ -110,6 +114,7 @@ namespace DrillSnake
                     continue;
                 }
 
+                map.PlaceDrillPowerups();
                 map._rejectedFailures.AddRange(rejectedFailures);
                 return map;
             }
@@ -853,6 +858,36 @@ namespace DrillSnake
                     _ => 0
                 };
                 PlaceStructuredOreRing(room, oreType, targetCount);
+            }
+        }
+
+        private void PlaceDrillPowerups()
+        {
+            _drillPowerupCells.Clear();
+
+            // One deterministic charge in each transfer chamber keeps every
+            // quadrant supplied without introducing random tile scatter.
+            for (var roomId = InnerNorthRoomId;
+                 roomId <= InnerWestRoomId;
+                 roomId++)
+            {
+                var room = Graph.GetRoom(roomId);
+                var candidates = new[]
+                {
+                    room.Center,
+                    room.Center + Vector2Int.up,
+                    room.Center + Vector2Int.right,
+                    room.Center + Vector2Int.down,
+                    room.Center + Vector2Int.left
+                };
+                foreach (var candidate in candidates)
+                {
+                    if (GetCell(candidate) == DrillSnakeCellType.OpenFloor)
+                    {
+                        _drillPowerupCells.Add(candidate);
+                        break;
+                    }
+                }
             }
         }
 

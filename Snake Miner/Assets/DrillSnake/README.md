@@ -2,7 +2,7 @@
 
 Open `Assets/DrillSnake/Scenes/DrillSnakePrototype.unity` and enter Play Mode.
 The scene has one runtime component; it creates the level, camera, lighting,
-snake, UI, upgrade panel, and debug overlays without manual references.
+snake, turret, pickups, UI, and debug overlays without manual references.
 
 The prototype uses discrete, authoritative grid movement. A turn changes heading
 at the center of a cell, immediate 180-degree reversals are rejected, and the
@@ -26,17 +26,43 @@ noise.
 
 The snake waits at the refinery until a direction or Space is pressed. Reach any
 cyan refinery dock with cargo to bank it, consume the temporary cargo segments,
-reset heat, and stop at the refinery. Credits and upgrades persist during Play
-Mode.
+reset heat, and stop at the refinery. Banked credits persist during Play Mode.
+The previous upgrade shop is hidden while this new loop is evaluated.
+While stopped at a departure prompt, forward and both 90-degree directions
+restart immediately; only the direction directly backward into the chassis is
+rejected.
 
-Drilling is impact-based. Entering a destructible cell rams it without moving
-the authoritative snake, visibly recoils only the drill head, and removes drill damage
-from that cell's integrity. Every damage event recoils, including the impact
-that reduces integrity to zero. That final ram opens the cell, but the following
-logical tick performs the move into it and collects any ore. Soft rock and
-Common, Rare, and Very Rare ore require progressively more base drill impacts.
-Partial damage survives expedition failure; the Drill Motor upgrade increases
-damage per impact. Bedrock remains indestructible.
+The turret on the drill head automatically targets the nearest visible ore
+within range. Solid cells block line of sight, and shots cannot squeeze
+diagonally through touching rock corners. Common, Rare, and Very Rare deposits
+take progressively more shots. Destroying a deposit converts its cell to floor
+and scatters three collectible ore fragments into nearby open cells. Each
+fragment adds one cargo segment when the snake's head comes within its 1.5-cell
+pickup radius; the fragments divide the deposit's total value exactly. At most
+one fragment is absorbed per logical movement tick so every new cargo segment
+receives a valid tail position. On collection, the fragment visibly arcs into
+the moving drill head and finishes with an ore-colored flash, ring, and spark
+burst.
+
+Normal contact with soft rock, bedrock, or intact ore simply blocks movement and
+does not damage the cell. Four deterministic drill-charge pickups are placed in
+the transfer chambers. Collecting one activates the drill for 10 seconds. While
+active, entering any in-bounds solid cell destroys it immediately and advances
+the snake into that cell; destroyed ore still scatters collectible fragments.
+The HUD countdown and pulsing orange aura show the active window.
+
+Heat is pressure rather than a failure state. Movement, cargo, and boosting add
+heat, and the snake accelerates continuously up to a +140% speed bonus at 100
+heat. Heat can continue rising without ending an expedition; the speed bonus is
+capped, while the hotter cadence makes long, cargo-heavy return trips harder to
+control. Banking at the refinery resets heat.
+The entire snake also shifts progressively toward a hot red tint along the
+same 0–100 heat curve, providing an immediate visual warning before the
+accelerated movement becomes difficult to manage. The tint smoothly cools back
+to the normal art colors when heat resets. Above 70 heat, the drill head begins
+venting pale steam; above 86 heat, darker smoke joins it. Both effects grow
+denser toward maximum heat and leave short world-space trails behind the moving
+snake.
 
 ## Graph-first generation
 
@@ -164,19 +190,19 @@ The default-seed report is:
   metadata.
 - `DrillSnakeMap` owns the mutable 45x45 tile grid and graph-first rasterizer.
 - `DrillSnakeLevelValidator` gates generated candidates.
-- `DrillSnakeSimulation` owns authoritative positions, cargo, heat, drilling,
-  buffered turns, collision, docking, and expedition reset without scene
-  dependencies.
+- `DrillSnakeSimulation` owns authoritative positions, cargo, heat, turret
+  targeting and damage, scattered ore pickups, timed drill power, buffered
+  turns, collision, docking, and expedition reset without scene dependencies.
 - `DrillSnakeSession` owns banked credits independently of disposable expedition
   cargo and prevents the same cargo from being banked twice.
 - `DrillSnakeDesignDiagnostics` is the pure virtual-body pathfinding diagnostic.
 - `DrillSnakeController` reads the Input System and coordinates generation,
-  timing, upgrades, banking, and failure sequences.
+  movement timing, automatic turret cadence, banking, and failure sequences.
 - `DrillSnakeWorldView` builds the hand-painted industrial mine presentation,
-  mechanical snake modules, warm mine lamps, refinery dressing, and both debug
-  overlays.
+  turret and projectiles, collectible fragments, drill charges, mechanical
+  snake modules, warm mine lamps, refinery dressing, and both debug overlays.
 - `DrillSnakeHud` creates the dark gunmetal resource, objective, heat, controls,
-  and horizontal refinery-upgrade panels.
+  and drill-power countdown panels. Upgrade controls are currently hidden.
 - `DrillSnakeSceneBuilder` is available at **Tools > Drill Snake > Build
   Prototype Scene**.
 
@@ -188,8 +214,8 @@ seed, or explicit reset generates the level again.
 The world intentionally keeps the simulation grid exact while offering two
 complete, interchangeable art passes. Press **T** at any time. Toggling rebuilds
 only the presentation from the live mutable map; the snake position, cargo,
-banked credits, upgrades, partially damaged rock, active seed, and mined terrain
-are preserved.
+banked credits, turret damage, scattered fragments, unused drill charges,
+active seed, and mined terrain are preserved.
 
 ### Illustrated PNG
 
@@ -199,17 +225,27 @@ This mode presents the mine with authored raster textures and atlases:
   floor beneath the generated routes.
 - `Assets/Resources/Art/DrillSnakeBedrock.png` and
   `DrillSnakeSoftRock.png` distinguish permanent blue-black rock masses from
-  warmer destructible sedimentary rock.
+  warmer soft rock.
 - `Assets/Resources/Art/DrillSnakeMachineAtlas.png` provides the illustrated
   drill vehicle, conveyor chassis, cargo wagon, and refinery platform.
 - `Assets/Resources/Art/DrillSnakeOreAtlas.png` provides the three ore clusters
   and warm wall lantern.
 - `Assets/Resources/Art/DrillSnakeUpgradeAtlas.png` provides large refinery
-  upgrade icons.
+  upgrade icons retained for the currently hidden progression UI.
 - Ore remains strongly color-coded—orange common, blue rare, magenta very
   rare—while embedded in a dark rock matrix.
-- The camera follows the head at a close gameplay scale with two cells of
-  forward lead instead of framing the entire 45x45 layout at once.
+- The orthographic camera follows the head from a fixed 64-degree
+  three-quarter angle, with forward lead and smooth damping instead of framing
+  the entire 45x45 layout at once. Its trailing offset exposes model height,
+  steam, smoke, and mine-wall depth.
+- Each cargo segment smoothly increases the orthographic view size by 0.055,
+  up to a safe maximum of 11.25. Banking eases the camera back toward its
+  original 7.5 framing as temporary cargo segments are consumed.
+- Grid cells remain authoritative, but visible snake modules travel along
+  arc-length-parameterized cubic paths. Straight cells move at constant speed;
+  90-degree corners preserve their incoming tangent and bend gradually into
+  the new direction. The camera locks to this already-smooth visual path rather
+  than adding a second catch-up layer.
 - The normal HUD uses compact flat charcoal resource and objective panels.
   Controls and validation details appear only while a debug mode is active.
 - Warm point lights are placed deterministically at selected graph rooms. They
@@ -235,12 +271,14 @@ It is built entirely from generated meshes, Unity primitives, flat palettes, and
 - Soft sandstone and permanent blue basalt remain immediately distinguishable.
 - Orange, cobalt, and magenta emissive crystal clusters communicate ore value.
 - The snake is a generated low-poly machine: faceted drill cone, gunmetal body,
-  orange collar, tracks, couplers, drive gears, and visible cargo crystals.
+  orange collar, automatic turret, tracks, couplers, drive gears, and visible
+  cargo crystals.
+- Turret projectiles, scattered ore fragments, drill-charge pickups, and the
+  active-drill aura are generated in both art modes.
 - The refinery is a generated steel deck with a turntable, loading recess,
   warning pylons, safety markings, and dock beacons.
 - Mine lamps use simple generated housings plus warm emission and point lights.
-- PNG upgrade icons are hidden in this mode, leaving a clean type-driven
-  refinery interface.
+- The upgrade interface is hidden in both modes during this loop test.
 
 `DrillSnakeArtMode` selects the initial mode on `DrillSnakeController`; newly
 bootstrapped prototype scenes default to `ProceduralCel`. The custom shader is
@@ -250,11 +288,13 @@ all visual objects and materials are created dynamically.
 ## Edit Mode coverage
 
 `Assets/DrillSnake/Tests/Editor/DrillSnakeSimulationTests.cs` covers single-cell
-ticks, buffered turns, reversal rejection, segment following, ore growth,
-banking and permanent chassis retention, body/bedrock collision, drilling,
-material-specific ram counts, persistent partial rock damage, drill-motor
-damage, credit persistence, validator fault cases, deterministic content, ore
-distance, heat, and the long-snake report. The generator test validates 50
+ticks, buffered turns, reversal rejection, segment following, fragment growth,
+banking and permanent chassis retention, body collision, blocked normal contact,
+turret shot counts, persistent turret damage, fragment value conservation,
+10-second drill charges, powered bedrock destruction, credit persistence,
+validator fault cases, deterministic content, ore distance, turret line of
+sight, non-fatal heat acceleration, and the long-snake report. The generator
+test validates 50
 deterministic seeds for each of the three presets (150 generated maps per test
 run).
 
@@ -268,29 +308,23 @@ the following serialized `DrillSnakeTuning` values are editable:
 | Movement | Movement tick | 0.200 s | Normal cell interval |
 | Movement | Boost tick | 0.105 s | Boosted cell interval cap |
 | Movement | Slow-test multiplier | 3.0x | Debug slowdown |
-| Movement | Speed upgrade reduction | 0.018 s/level | Normal interval reduction; 0.07 s floor |
 | Movement | Bank segment time | 0.090 s | Tail-consumption animation per cargo |
-| Drilling | Soft-rock health | 2 | Base rams required |
-| Drilling | Common-ore health | 2 | Base rams required |
-| Drilling | Rare-ore health | 3 | Base rams required |
-| Drilling | Very-Rare-ore health | 4 | Base rams required |
-| Drilling | Base drill damage | 1 | Integrity removed per impact |
-| Drilling | Drill Motor damage | +1/level | Additional integrity removed per impact |
-| Drilling | Impact recovery | 0.300 s | Minimum interval before another logical action |
-| Drilling | Recoil duration | 92% | Portion of the impact interval used by recoil; 0.4 s cap |
-| Drilling | Recoil distance | 0.52 cells | Maximum backward visual displacement |
-| Heat | Base maximum | 100 | Failure threshold |
-| Heat | Cooling capacity | +18/level | Maximum-heat increase |
+| Turret | Range | 5.5 cells | Automatic nearest-visible-ore acquisition radius |
+| Turret | Fire interval | 0.620 s | Delay between automatic shots |
+| Turret | Damage | 1 | Ore integrity removed per shot |
+| Turret | Projectile travel | 0.260 s | Visible shot travel time |
+| Turret | Projectile size | 0.26 cells | Projectile diameter |
+| Turret | Ore fragments | 3 | Collectibles scattered by a destroyed deposit |
+| Pickup | Ore radius | 1.5 cells | Head-centered fragment collection radius |
+| Drill charge | Duration | 10.0 s | Contact-destruction window |
+| Ore health | Common | 2 | Turret shots required |
+| Ore health | Rare | 3 | Turret shots required |
+| Ore health | Very Rare | 4 | Turret shots required |
+| Heat | Full-speed heat | 100 | Heat where acceleration reaches its cap |
+| Heat | Maximum speed bonus | +140% | Capped high-heat movement bonus |
 | Heat | Movement heat | 0.55/cell | Base heat per move |
-| Heat | Drilling heat | 4.5/impact | Heat added by every drill impact |
 | Heat | Cargo heat | 0.055/segment/cell | Long-body heat surcharge |
 | Heat | Boost heat | 1.8/cell | Additional boost heat |
 | Ore | Common value | 15 CR | Base cargo value |
 | Ore | Rare value | 50 CR | Base cargo value |
 | Ore | Very Rare value | 140 CR | Base cargo value |
-| Ore | Scanner bonus | +15%/level | Multiplicative ore-value bonus |
-| Upgrades | Cooling base cost | 100 CR | Level-0 purchase cost |
-| Upgrades | Drill Motor base cost | 130 CR | Level-0 purchase cost |
-| Upgrades | Drive Speed base cost | 160 CR | Level-0 purchase cost |
-| Upgrades | Ore Scanner base cost | 140 CR | Level-0 purchase cost |
-| Upgrades | Cost growth | 1.75x/level | Multiplicative cost curve |

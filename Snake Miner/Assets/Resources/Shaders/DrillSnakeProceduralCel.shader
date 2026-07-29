@@ -6,6 +6,8 @@ Shader "DrillSnake/Procedural Cel"
         _ShadowColor("Shadow Color", Color) = (0.06, 0.07, 0.08, 1)
         _AccentColor("Pattern Accent", Color) = (0.55, 0.58, 0.6, 1)
         _EmissionColor("Emission", Color) = (0, 0, 0, 0)
+        _HeatTintColor("Heat Tint", Color) = (1, 0.08, 0.025, 1)
+        _HeatTintStrength("Heat Tint Strength", Range(0, 1)) = 0
         _PatternScale("Pattern Scale", Range(0.1, 16)) = 4
         _PatternStrength("Pattern Strength", Range(0, 1)) = 0.2
     }
@@ -55,6 +57,8 @@ Shader "DrillSnake/Procedural Cel"
                 half4 _ShadowColor;
                 half4 _AccentColor;
                 half4 _EmissionColor;
+                half4 _HeatTintColor;
+                float _HeatTintStrength;
                 float _PatternScale;
                 float _PatternStrength;
             CBUFFER_END
@@ -128,6 +132,13 @@ Shader "DrillSnake/Procedural Cel"
                 color += _AccentColor.rgb * rim * 0.08h;
                 color *= mainLight.color;
                 color += _EmissionColor.rgb;
+                half brightness = max(color.r, max(color.g, color.b));
+                half3 heatedColor = _HeatTintColor.rgb *
+                    (0.32h + brightness * 0.8h);
+                color = lerp(
+                    color,
+                    lerp(color, heatedColor, 0.78h),
+                    saturate(_HeatTintStrength));
                 color = MixFog(color, input.fogFactor);
                 return half4(color, 1.0h);
             }
