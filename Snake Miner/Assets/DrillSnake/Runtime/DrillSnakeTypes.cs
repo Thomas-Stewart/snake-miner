@@ -10,6 +10,12 @@ namespace DrillSnake
         HardMagmaFissures
     }
 
+    public enum DrillSnakeArtMode
+    {
+        IllustratedPng,
+        ProceduralCel
+    }
+
     public enum DrillSnakeRoomKind
     {
         Refinery,

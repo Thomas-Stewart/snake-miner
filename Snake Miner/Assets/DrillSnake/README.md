@@ -22,6 +22,7 @@ noise.
 - **G**: toggle the cell-grid overlay
 - **1 / 2**: slow test movement / restore normal movement
 - **H**: toggle heat-free testing
+- **T**: instantly toggle Illustrated PNG / Procedural Cel art modes
 
 The snake waits at the refinery until a direction or Space is pressed. Reach any
 cyan refinery dock with cargo to bank it, consume the temporary cargo segments,
@@ -184,8 +185,15 @@ seed, or explicit reset generates the level again.
 
 ## Visual presentation
 
-The world intentionally keeps the simulation grid exact while presenting it as
-a dark top-down industrial mine:
+The world intentionally keeps the simulation grid exact while offering two
+complete, interchangeable art passes. Press **T** at any time. Toggling rebuilds
+only the presentation from the live mutable map; the snake position, cargo,
+banked credits, upgrades, partially damaged rock, active seed, and mined terrain
+are preserved.
+
+### Illustrated PNG
+
+This mode presents the mine with authored raster textures and atlases:
 
 - `Assets/Resources/Art/DrillSnakeMineFloor.png` is the repeating worn slab
   floor beneath the generated routes.
@@ -211,6 +219,33 @@ Art textures and atlases are loaded through `Resources/Art`; missing assets fall
 back without changing the grid model, so level logic does not depend on art
 imports. The exact ImageGen prompt set is preserved in
 `Assets/Resources/Art/DrillSnakeArtPrompts.md`.
+
+### Procedural Cel
+
+This is the default presentation and does not sample any PNG art in the world.
+It is built entirely from generated meshes, Unity primitives, flat palettes, and
+`Assets/Resources/Shaders/DrillSnakeProceduralCel.shader`.
+
+- Three-step lighting bands create a clean cel-shaded read from the top-down
+  camera.
+- World-space hatching and deterministic color flecks provide light surface
+  texture without texture maps or random per-frame noise.
+- Ink silhouette blocks give rocks, machinery, and train modules a graphic dark
+  edge.
+- Soft sandstone and permanent blue basalt remain immediately distinguishable.
+- Orange, cobalt, and magenta emissive crystal clusters communicate ore value.
+- The snake is a generated low-poly machine: faceted drill cone, gunmetal body,
+  orange collar, tracks, couplers, drive gears, and visible cargo crystals.
+- The refinery is a generated steel deck with a turntable, loading recess,
+  warning pylons, safety markings, and dock beacons.
+- Mine lamps use simple generated housings plus warm emission and point lights.
+- PNG upgrade icons are hidden in this mode, leaving a clean type-driven
+  refinery interface.
+
+`DrillSnakeArtMode` selects the initial mode on `DrillSnakeController`; newly
+bootstrapped prototype scenes default to `ProceduralCel`. The custom shader is
+stored under `Resources/Shaders`, ensuring runtime builds retain it even though
+all visual objects and materials are created dynamically.
 
 ## Edit Mode coverage
 

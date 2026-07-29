@@ -15,6 +15,9 @@ namespace DrillSnake
         [SerializeField]
         private DrillSnakeLayoutPreset layoutPreset =
             DrillSnakeLayoutPreset.MediumCrystalCaverns;
+        [SerializeField]
+        private DrillSnakeArtMode artMode =
+            DrillSnakeArtMode.ProceduralCel;
         [SerializeField] private DrillSnakeTuning tuning = new();
 
         private readonly DrillSnakeSession _session = new();
@@ -103,7 +106,7 @@ namespace DrillSnake
             var map = DrillSnakeMap.Generate(seed, layoutPreset);
             levelSeed = map.Seed;
             _simulation = new DrillSnakeSimulation(map);
-            _worldView.BuildWorld(map);
+            _worldView.BuildWorld(map, artMode);
             _worldView.SyncSnake(_simulation, 0f);
             SnapCameraToSnake();
             _nextMoveTime = Time.time;
@@ -331,6 +334,27 @@ namespace DrillSnake
                         : new Color(1f, 0.7f, 0.25f),
                     1.2f);
             }
+
+            if (keyboard.tKey.wasPressedThisFrame)
+            {
+                ToggleArtMode();
+            }
+        }
+
+        private void ToggleArtMode()
+        {
+            artMode = artMode == DrillSnakeArtMode.IllustratedPng
+                ? DrillSnakeArtMode.ProceduralCel
+                : DrillSnakeArtMode.IllustratedPng;
+            _worldView.BuildWorld(_simulation.Map, artMode);
+            _worldView.SyncSnake(_simulation, 0f);
+            _hud.SetArtMode(artMode);
+            _hud.ShowMessage(
+                artMode == DrillSnakeArtMode.ProceduralCel
+                    ? "ART MODE  •  PROCEDURAL CEL"
+                    : "ART MODE  •  ILLUSTRATED PNG",
+                new Color(0.42f, 0.92f, 1f),
+                1.4f);
         }
 
         private void SelectPreset(DrillSnakeLayoutPreset preset)
@@ -402,6 +426,7 @@ namespace DrillSnake
                 _heatFree,
                 _worldView.GridVisible,
                 _worldView.LevelDesignOverlayVisible,
+                artMode,
                 _simulation.IsAtRefinery,
                 !_expeditionMoving && !_busy,
                 GetUpgradeLevel,

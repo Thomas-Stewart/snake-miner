@@ -161,6 +161,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: DrillSnake.Runtime::DrillSnake.DrillSnakeController
   levelSeed: 240628
   layoutPreset: 1
+  artMode: 1
   tuning:
     movementTickSeconds: 0.2
     boostTickSeconds: 0.105

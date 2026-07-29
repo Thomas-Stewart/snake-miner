@@ -10,6 +10,7 @@ namespace DrillSnake
         private readonly Dictionary<DrillSnakeUpgradeType, Button> _upgradeButtons = new();
         private readonly Dictionary<DrillSnakeUpgradeType, Text> _upgradeLabels = new();
         private readonly Dictionary<DrillSnakeUpgradeType, Sprite> _upgradeIcons = new();
+        private readonly Dictionary<DrillSnakeUpgradeType, Image> _upgradeIconImages = new();
 
         private Font _font;
         private Text _bankedText;
@@ -62,6 +63,7 @@ namespace DrillSnake
             bool heatFree,
             bool gridVisible,
             bool levelDesignOverlayVisible,
+            DrillSnakeArtMode artMode,
             bool atRefinery,
             bool waitingToDepart,
             Func<DrillSnakeUpgradeType, int> getUpgradeLevel,
@@ -126,6 +128,8 @@ namespace DrillSnake
                 "1 / 2          Slow / Normal\n" +
                 "G              Grid overlay\n" +
                 "H              Heat-free mode\n" +
+                "T              PNG / Cel art\n" +
+                $"<color=#86DCEB>ART  {ArtModeName(artMode)}</color>\n" +
                 $"<color=#86A4B4>{validationText}</color>" +
                 debugFlags;
             _debugPanel.SetActive(
@@ -135,6 +139,7 @@ namespace DrillSnake
                 heatFree);
 
             _upgradePanel.SetActive(atRefinery);
+            SetArtMode(artMode);
             foreach (var pair in _upgradeButtons)
             {
                 var type = pair.Key;
@@ -159,6 +164,26 @@ namespace DrillSnake
             _messageText.color = color;
             _messageText.text = message;
             _messageHideTime = Time.time + duration;
+        }
+
+        public void SetArtMode(DrillSnakeArtMode artMode)
+        {
+            var showPngIcons = artMode == DrillSnakeArtMode.IllustratedPng;
+            foreach (var pair in _upgradeIconImages)
+            {
+                pair.Value.gameObject.SetActive(showPngIcons);
+            }
+
+            foreach (var pair in _upgradeLabels)
+            {
+                SetRect(
+                    pair.Value.rectTransform,
+                    new Vector2(0f, 0f),
+                    new Vector2(0f, 1f),
+                    new Vector2(showPngIcons ? 120f : 24f, 0f),
+                    new Vector2(showPngIcons ? 164f : 260f, -20f),
+                    new Vector2(0f, 0.5f));
+            }
         }
 
         private void Update()
@@ -377,6 +402,7 @@ namespace DrillSnake
 
             _upgradeButtons[type] = button;
             _upgradeLabels[type] = label;
+            _upgradeIconImages[type] = icon;
         }
 
         private Text CreateText(
@@ -523,6 +549,13 @@ namespace DrillSnake
                 DrillSnakeUpgradeType.OreScanner => "+15% ore value",
                 _ => string.Empty
             };
+        }
+
+        private static string ArtModeName(DrillSnakeArtMode mode)
+        {
+            return mode == DrillSnakeArtMode.ProceduralCel
+                ? "PROCEDURAL CEL"
+                : "ILLUSTRATED PNG";
         }
     }
 }
