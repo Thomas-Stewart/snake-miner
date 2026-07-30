@@ -10,12 +10,12 @@ namespace DrillSnake
     [DisallowMultipleComponent]
     public sealed class DrillSnakeController : MonoBehaviour
     {
-        private const float CameraPitchDegrees = 64f;
+        private const float CameraPitchDegrees = 72f;
         private const float CameraBaseOrthographicSize = 7.5f;
         private const float CameraSizePerCargoSegment = 0.055f;
         private const float CameraMaximumOrthographicSize = 11.25f;
         private static readonly Vector3 CameraFollowOffset =
-            new(0f, 28f, -13.7f);
+            new(0f, 28f, -9.1f);
 
         [Header("Prototype")]
         [SerializeField] private int levelSeed = 240628;
@@ -626,22 +626,46 @@ namespace DrillSnake
         private static void EnsureLighting()
         {
             RenderSettings.ambientMode = AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = new Color(0.26f, 0.29f, 0.33f);
-            RenderSettings.ambientEquatorColor = new Color(0.14f, 0.14f, 0.145f);
-            RenderSettings.ambientGroundColor = new Color(0.035f, 0.032f, 0.03f);
+            RenderSettings.ambientSkyColor = new Color(0.115f, 0.135f, 0.18f);
+            RenderSettings.ambientEquatorColor = new Color(0.045f, 0.052f, 0.068f);
+            RenderSettings.ambientGroundColor = new Color(0.009f, 0.011f, 0.016f);
+            RenderSettings.reflectionIntensity = 0.26f;
+            QualitySettings.shadows = ShadowQuality.All;
+            QualitySettings.shadowResolution = ShadowResolution.High;
+            QualitySettings.shadowDistance = 55f;
 
-            if (FindFirstObjectByType<Light>() != null)
+            var key = EnsureDirectionalLight("Excavation Key Light");
+            key.color = new Color(0.82f, 0.88f, 1f);
+            key.intensity = 1.34f;
+            key.shadows = LightShadows.Soft;
+            key.shadowStrength = 0.92f;
+            key.shadowBias = 0.035f;
+            key.shadowNormalBias = 0.24f;
+            key.transform.rotation = Quaternion.Euler(42f, -38f, 0f);
+
+            var rim = EnsureDirectionalLight("Excavation Rim Light");
+            rim.color = new Color(0.22f, 0.31f, 0.52f);
+            rim.intensity = 0.16f;
+            rim.shadows = LightShadows.None;
+            rim.transform.rotation = Quaternion.Euler(58f, 142f, 0f);
+        }
+
+        private static Light EnsureDirectionalLight(string name)
+        {
+            var lightObject = GameObject.Find(name);
+            if (lightObject == null)
             {
-                return;
+                lightObject = new GameObject(name);
             }
 
-            var lightObject = new GameObject("Excavation Key Light");
-            var light = lightObject.AddComponent<Light>();
+            var light = lightObject.GetComponent<Light>();
+            if (light == null)
+            {
+                light = lightObject.AddComponent<Light>();
+            }
+
             light.type = LightType.Directional;
-            light.color = new Color(0.78f, 0.84f, 0.92f);
-            light.intensity = 1.18f;
-            light.shadows = LightShadows.Soft;
-            lightObject.transform.rotation = Quaternion.Euler(48f, -32f, 0f);
+            return light;
         }
 
         private static void EnsureEventSystem()

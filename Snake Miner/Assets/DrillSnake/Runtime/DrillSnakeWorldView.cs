@@ -76,6 +76,8 @@ namespace DrillSnake
         private Sprite _rareOreSprite;
         private Sprite _veryRareOreSprite;
         private Sprite _lampSprite;
+        private Mesh _beveledCubeMesh;
+        private Mesh _crystalMesh;
         private Mesh _drillConeMesh;
         private GameObject _drillAura;
         private bool _drillAuraActive;
@@ -153,6 +155,11 @@ namespace DrillSnake
                 {
                     CreateCellVisual(new Vector2Int(x, y), map.GetCell(new Vector2Int(x, y)));
                 }
+            }
+
+            if (_artMode == DrillSnakeArtMode.ProceduralCel)
+            {
+                CreateProceduralFloorDebris();
             }
 
             CreateRefinerySetDressing();
@@ -352,6 +359,7 @@ namespace DrillSnake
 
                 BeginMovementPath(view, target, movementDuration, now);
             }
+
         }
 
         public IEnumerator AnimateTailConsumption(float duration)
@@ -954,25 +962,28 @@ namespace DrillSnake
             {
                 _floorMaterial = CreateCelMaterial(
                     "Cel Slate Floor",
-                    new Color(0.22f, 0.25f, 0.27f),
-                    new Color(0.085f, 0.1f, 0.115f),
-                    new Color(0.34f, 0.3f, 0.24f),
-                    1.02f,
-                    0.18f);
+                    new Color(0.135f, 0.145f, 0.165f),
+                    new Color(0.026f, 0.03f, 0.04f),
+                    new Color(0.24f, 0.245f, 0.255f),
+                    1.35f,
+                    0.18f,
+                    stoneSurface: 0.3f);
                 _softRockMaterial = CreateCelMaterial(
                     "Cel Drillable Sandstone",
-                    new Color(0.45f, 0.29f, 0.18f),
-                    new Color(0.18f, 0.1f, 0.065f),
-                    new Color(0.68f, 0.45f, 0.24f),
-                    4.7f,
-                    0.28f);
+                    new Color(0.49f, 0.31f, 0.18f),
+                    new Color(0.105f, 0.055f, 0.033f),
+                    new Color(0.72f, 0.48f, 0.27f),
+                    3.8f,
+                    0.3f,
+                    stoneSurface: 1f);
                 _bedrockMaterial = CreateCelMaterial(
                     "Cel Basalt Bedrock",
-                    new Color(0.16f, 0.22f, 0.3f),
-                    new Color(0.035f, 0.055f, 0.09f),
-                    new Color(0.27f, 0.38f, 0.52f),
-                    5.4f,
-                    0.24f);
+                    new Color(0.285f, 0.385f, 0.59f),
+                    new Color(0.035f, 0.055f, 0.105f),
+                    new Color(0.48f, 0.61f, 0.84f),
+                    3.2f,
+                    0.32f,
+                    stoneSurface: 1f);
                 _refineryMaterial = CreateCelMaterial(
                     "Cel Refinery Deck",
                     new Color(0.29f, 0.32f, 0.33f),
@@ -1004,11 +1015,11 @@ namespace DrillSnake
                     0f);
                 _steelMaterial = CreateCelMaterial(
                     "Cel Gunmetal",
-                    new Color(0.23f, 0.29f, 0.32f),
-                    new Color(0.045f, 0.065f, 0.075f),
-                    new Color(0.43f, 0.5f, 0.52f),
+                    new Color(0.3f, 0.34f, 0.37f),
+                    new Color(0.04f, 0.05f, 0.06f),
+                    new Color(0.52f, 0.57f, 0.59f),
                     6f,
-                    0.14f);
+                    0.08f);
                 _steelLightMaterial = CreateCelMaterial(
                     "Cel Silver",
                     new Color(0.56f, 0.62f, 0.63f),
@@ -1018,12 +1029,12 @@ namespace DrillSnake
                     0.12f);
                 _machineAccentMaterial = CreateCelMaterial(
                     "Cel Machine Orange",
-                    new Color(0.92f, 0.4f, 0.055f),
-                    new Color(0.3f, 0.09f, 0.015f),
-                    new Color(1f, 0.68f, 0.1f),
+                    new Color(1f, 0.34f, 0.035f),
+                    new Color(0.23f, 0.035f, 0.008f),
+                    new Color(1f, 0.7f, 0.09f),
                     4f,
-                    0.22f,
-                    new Color(0.08f, 0.018f, 0f));
+                    0.08f,
+                    new Color(0.34f, 0.055f, 0.002f));
                 _rubberMaterial = CreateCelMaterial(
                     "Cel Track Rubber",
                     new Color(0.055f, 0.065f, 0.07f),
@@ -1041,12 +1052,12 @@ namespace DrillSnake
                     new Color(0.5f, 0.08f, 0.003f));
                 _rareOreMaterial = CreateCelMaterial(
                     "Cel Cobalt Ore",
-                    new Color(0.08f, 0.62f, 1f),
-                    new Color(0.015f, 0.1f, 0.3f),
-                    new Color(0.35f, 0.94f, 1f),
+                    new Color(0.08f, 0.74f, 1f),
+                    new Color(0.018f, 0.14f, 0.34f),
+                    new Color(0.46f, 1f, 1f),
                     7f,
                     0.24f,
-                    new Color(0.015f, 0.2f, 0.52f));
+                    new Color(0.025f, 0.38f, 0.95f));
                 _veryRareOreMaterial = CreateCelMaterial(
                     "Cel Plasma Ore",
                     new Color(0.95f, 0.12f, 0.72f),
@@ -1054,7 +1065,7 @@ namespace DrillSnake
                     new Color(1f, 0.48f, 0.95f),
                     7f,
                     0.25f,
-                    new Color(0.42f, 0.015f, 0.32f));
+                    new Color(0.72f, 0.025f, 0.56f));
                 _lampMaterial = CreateCelMaterial(
                     "Cel Lamp Glow",
                     new Color(1f, 0.62f, 0.08f),
@@ -1193,7 +1204,50 @@ namespace DrillSnake
                 _worldRoot,
                 _floorMaterial);
             floor.transform.position = new Vector3(0f, -0.11f, 2f);
-            floor.transform.localScale = new Vector3(9.2f, 1f, 6.2f);
+            floor.transform.localScale = new Vector3(12f, 1f, 10f);
+        }
+
+        private void CreateProceduralFloorDebris()
+        {
+            var debrisRoot = new GameObject("Procedural Floor Debris");
+            debrisRoot.transform.SetParent(_worldRoot, false);
+            for (var y = 1; y < _map.Height - 1; y++)
+            {
+                for (var x = 1; x < _map.Width - 1; x++)
+                {
+                    var cell = new Vector2Int(x, y);
+                    var type = _map.GetCell(cell);
+                    if (type != DrillSnakeCellType.OpenFloor ||
+                        Hash01(cell, 211) < 0.88f)
+                    {
+                        continue;
+                    }
+
+                    var size = 0.07f + Hash01(cell, 223) * 0.13f;
+                    var pebble = CreateMeshObject(
+                        $"Loose Stone {x},{y}",
+                        debrisRoot.transform,
+                        GetBeveledCubeMesh(),
+                        Hash01(cell, 227) > 0.72f
+                            ? _softRockMaterial
+                            : _bedrockMaterial);
+                    pebble.transform.position = GridToWorld(
+                        cell,
+                        -0.045f + size * 0.18f);
+                    pebble.transform.position += new Vector3(
+                        (Hash01(cell, 229) - 0.5f) * 0.56f,
+                        0f,
+                        (Hash01(cell, 233) - 0.5f) * 0.56f);
+                    pebble.transform.rotation = Quaternion.Euler(
+                        Hash01(cell, 239) * 28f,
+                        HashAngle(cell) + Hash01(cell, 241) * 45f,
+                        Hash01(cell, 251) * 28f);
+                    pebble.transform.localScale = new Vector3(
+                        size,
+                        size * (0.38f + Hash01(cell, 257) * 0.34f),
+                        size * (0.72f + Hash01(cell, 263) * 0.5f));
+                }
+            }
         }
 
         private void CreateCellVisual(Vector2Int cell, DrillSnakeCellType type)
@@ -1201,10 +1255,10 @@ namespace DrillSnake
             switch (type)
             {
                 case DrillSnakeCellType.SoftRock:
-                    CreateRock(cell, "Soft Rock", _softRockMaterial, 0.64f, 0.94f);
+                    CreateRock(cell, "Soft Rock", _softRockMaterial, 0.98f, 0.96f);
                     break;
                 case DrillSnakeCellType.Bedrock:
-                    CreateRock(cell, "Bedrock", _bedrockMaterial, 1f, 0.97f);
+                    CreateRock(cell, "Bedrock", _bedrockMaterial, 1.2f, 0.97f);
                     break;
                 case DrillSnakeCellType.CommonOre:
                     CreateOre(cell, DrillSnakeOreType.Common);
@@ -1239,35 +1293,54 @@ namespace DrillSnake
 
             if (_artMode == DrillSnakeArtMode.ProceduralCel)
             {
+                var blockHeight =
+                    height * (0.76f + Hash01(cell, 17) * 0.22f);
+                if (Hash01(cell, 19) > 0.88f)
+                {
+                    blockHeight *= 1.16f;
+                }
+                var width = footprint *
+                    (0.965f + Hash01(cell, 23) * 0.035f);
+                var depth = footprint *
+                    (0.965f + Hash01(cell, 29) * 0.035f);
                 CreateOutlinedBlock(
                     "Faceted Rock",
                     root.transform,
                     material,
-                    new Vector3(0f, height * 0.39f, 0f),
+                    new Vector3(0f, blockHeight * 0.5f - 0.025f, 0f),
                     new Vector3(
-                        footprint + 0.015f,
-                        height * (0.7f + Hash01(cell, 17) * 0.16f),
-                        footprint + 0.015f),
-                    0.035f);
-                if (Hash01(cell, 41) > 0.58f)
+                        width,
+                        blockHeight,
+                        depth),
+                    0f);
+                var chipCount = Hash01(cell, 41) > 0.82f
+                    ? 2
+                    : Hash01(cell, 41) > 0.52f
+                        ? 1
+                        : 0;
+                for (var chipIndex = 0; chipIndex < chipCount; chipIndex++)
                 {
-                    var cap = CreatePrimitive(
-                        PrimitiveType.Cube,
-                        "Angular Rock Cap",
+                    var cap = CreateMeshObject(
+                        $"Angular Rock Cap {chipIndex + 1}",
                         root.transform,
+                        GetBeveledCubeMesh(),
                         material);
+                    var salt = chipIndex * 97;
+                    var capSize =
+                        0.1f + Hash01(cell, 67 + salt) * 0.13f;
                     cap.transform.localPosition = new Vector3(
-                        (Hash01(cell, 53) - 0.5f) * 0.23f,
-                        height * 0.79f,
-                        (Hash01(cell, 59) - 0.5f) * 0.23f);
+                        (Hash01(cell, 53 + salt) - 0.5f) * 0.54f,
+                        blockHeight + 0.018f + chipIndex * 0.012f,
+                        (Hash01(cell, 59 + salt) - 0.5f) * 0.54f);
                     cap.transform.localRotation = Quaternion.Euler(
-                        0f,
+                        (Hash01(cell, 73 + salt) - 0.5f) * 14f,
                         HashAngle(cell) + 45f,
-                        0f);
+                        (Hash01(cell, 79 + salt) - 0.5f) * 14f);
                     cap.transform.localScale = new Vector3(
-                        0.42f,
-                        0.1f + height * 0.08f,
-                        0.42f);
+                        capSize,
+                        0.07f + capSize * 0.22f,
+                        capSize *
+                        (0.72f + Hash01(cell, 83 + salt) * 0.3f));
                 }
 
                 _solidCells[cell] = root;
@@ -1293,7 +1366,7 @@ namespace DrillSnake
         {
             var root = new GameObject($"{oreType} Ore {cell.x},{cell.y}");
             root.transform.SetParent(_worldRoot, false);
-            root.transform.position = GridToWorld(cell, 0.66f);
+            root.transform.position = GridToWorld(cell, 0.34f);
             root.transform.rotation = Quaternion.Euler(0f, HashAngle(cell), 0f);
 
             if (_artMode == DrillSnakeArtMode.ProceduralCel)
@@ -1325,11 +1398,17 @@ namespace DrillSnake
             Material material,
             float height)
         {
-            var tile = CreatePrimitive(
-                PrimitiveType.Cube,
-                $"{name} {cell.x},{cell.y}",
-                _worldRoot,
-                material);
+            var tile = _artMode == DrillSnakeArtMode.ProceduralCel
+                ? CreateMeshObject(
+                    $"{name} {cell.x},{cell.y}",
+                    _worldRoot,
+                    GetBeveledCubeMesh(),
+                    material)
+                : CreatePrimitive(
+                    PrimitiveType.Cube,
+                    $"{name} {cell.x},{cell.y}",
+                    _worldRoot,
+                    material);
             tile.transform.position = GridToWorld(cell, height * 0.5f);
             tile.transform.localScale = new Vector3(0.96f, height, 0.96f);
         }
@@ -1417,10 +1496,10 @@ namespace DrillSnake
                 _artMode == DrillSnakeArtMode.ProceduralCel ? 0.2f : 0.74f);
             if (_artMode == DrillSnakeArtMode.ProceduralCel)
             {
-                var bracket = CreatePrimitive(
-                    PrimitiveType.Cube,
+                var bracket = CreateMeshObject(
                     "Cel Lamp Bracket",
                     root.transform,
+                    GetBeveledCubeMesh(),
                     _refineryDarkMaterial);
                 bracket.transform.localPosition = new Vector3(0f, 0.26f, 0f);
                 bracket.transform.localScale = new Vector3(0.3f, 0.46f, 0.18f);
@@ -1655,11 +1734,12 @@ namespace DrillSnake
                 var artwork = new GameObject(
                     index == 0 ? "Procedural Cel Drill" : "Procedural Cel Module");
                 artwork.transform.SetParent(root.transform, false);
+                artwork.transform.localScale = Vector3.one * 1.08f;
                 if (index == 0)
                 {
                     CreateProceduralDrillHead(artwork.transform);
                     var turret = CreateTurret(artwork.transform, 0.33f, 1f);
-                    CreateDrillAura(artwork.transform, -0.23f);
+                    CreateDrillAura(artwork.transform, -0.02f);
                     return new SegmentView
                     {
                         Root = root,
@@ -1730,18 +1810,18 @@ namespace DrillSnake
                 _refineryDarkMaterial);
             baseObject.transform.localScale = new Vector3(0.25f, 0.08f, 0.25f);
 
-            var housing = CreatePrimitive(
-                PrimitiveType.Cube,
+            var housing = CreateMeshObject(
                 "Turret Housing",
                 turretRoot,
+                GetBeveledCubeMesh(),
                 _dockMaterial);
             housing.transform.localPosition = new Vector3(0f, 0.13f, 0.04f);
             housing.transform.localScale = new Vector3(0.3f, 0.2f, 0.34f);
 
-            var barrel = CreatePrimitive(
-                PrimitiveType.Cube,
+            var barrel = CreateMeshObject(
                 "Turret Barrel",
                 turretRoot,
+                GetBeveledCubeMesh(),
                 _refineryMaterial);
             barrel.transform.localPosition = new Vector3(0f, 0.14f, 0.34f);
             barrel.transform.localScale = new Vector3(0.1f, 0.1f, 0.48f);
@@ -1794,13 +1874,13 @@ namespace DrillSnake
                 return root;
             }
 
-            var crystal = CreatePrimitive(
-                PrimitiveType.Cube,
+            var crystal = CreateMeshObject(
                 "Cel Ore Fragment",
                 root.transform,
+                GetCrystalMesh(),
                 GetOreMaterial(pickup.OreType));
             crystal.transform.localRotation = Quaternion.Euler(18f, 45f, 12f);
-            crystal.transform.localScale = new Vector3(0.22f, 0.34f, 0.22f);
+            crystal.transform.localScale = new Vector3(0.48f, 0.46f, 0.48f);
 
             var shadow = CreatePrimitive(
                 PrimitiveType.Cylinder,
@@ -2132,13 +2212,21 @@ namespace DrillSnake
             CreateOutlinedBlock(
                 "Drill Chassis",
                 parent,
-                _steelMaterial,
+                _machineAccentMaterial,
                 new Vector3(0f, 0f, -0.05f),
-                new Vector3(0.68f, 0.3f, 0.78f),
+                new Vector3(0.72f, 0.32f, 0.8f),
                 0.055f);
 
             CreateTrack(parent, -0.43f);
             CreateTrack(parent, 0.43f);
+
+            CreateOutlinedBlock(
+                "Drill Top Plate",
+                parent,
+                _refineryDarkMaterial,
+                new Vector3(0f, 0.19f, -0.08f),
+                new Vector3(0.48f, 0.09f, 0.42f),
+                0.02f);
 
             var collar = CreatePrimitive(
                 PrimitiveType.Cylinder,
@@ -2157,13 +2245,13 @@ namespace DrillSnake
             drill.transform.localPosition = new Vector3(0f, 0f, 0.78f);
             drill.transform.localScale = new Vector3(0.42f, 0.42f, 0.62f);
 
-            var stripe = CreatePrimitive(
-                PrimitiveType.Cube,
+            var stripe = CreateMeshObject(
                 "Safety Stripe",
                 parent,
-                _machineAccentMaterial);
-            stripe.transform.localPosition = new Vector3(0f, 0.19f, -0.04f);
-            stripe.transform.localScale = new Vector3(0.48f, 0.055f, 0.22f);
+                GetBeveledCubeMesh(),
+                _dockMaterial);
+            stripe.transform.localPosition = new Vector3(0f, 0.255f, -0.05f);
+            stripe.transform.localScale = new Vector3(0.34f, 0.045f, 0.14f);
 
             var core = CreatePrimitive(
                 PrimitiveType.Sphere,
@@ -2182,12 +2270,20 @@ namespace DrillSnake
             CreateOutlinedBlock(
                 carriesOre ? "Cargo Car" : "Drive Chassis",
                 parent,
-                carriesOre ? _refineryDarkMaterial : _steelMaterial,
+                _machineAccentMaterial,
                 Vector3.zero,
-                new Vector3(0.68f, 0.27f, 0.7f),
+                new Vector3(0.72f, 0.3f, 0.72f),
                 0.05f);
             CreateTrack(parent, -0.43f);
             CreateTrack(parent, 0.43f);
+
+            CreateOutlinedBlock(
+                carriesOre ? "Cargo Recess" : "Drive Top Plate",
+                parent,
+                _refineryDarkMaterial,
+                new Vector3(0f, 0.19f, 0f),
+                new Vector3(0.48f, 0.1f, 0.48f),
+                0.022f);
 
             var frontCoupler = CreatePrimitive(
                 PrimitiveType.Cylinder,
@@ -2212,23 +2308,23 @@ namespace DrillSnake
                 var oreMaterial = GetOreMaterial(oreType);
                 for (var i = 0; i < 3; i++)
                 {
-                    var crystal = CreatePrimitive(
-                        PrimitiveType.Cube,
+                    var crystal = CreateMeshObject(
                         $"Cargo Crystal {i + 1}",
                         parent,
+                        GetCrystalMesh(),
                         oreMaterial);
                     crystal.transform.localPosition = new Vector3(
                         (i - 1) * 0.19f,
-                        0.23f + (i == 1 ? 0.07f : 0f),
+                        0.3f + (i == 1 ? 0.07f : 0f),
                         i % 2 == 0 ? -0.04f : 0.05f);
                     crystal.transform.localRotation = Quaternion.Euler(
                         i == 1 ? 8f : -8f,
                         45f + i * 24f,
                         i == 1 ? -5f : 8f);
                     crystal.transform.localScale = new Vector3(
-                        0.16f,
+                        0.3f,
                         i == 1 ? 0.32f : 0.23f,
-                        0.16f);
+                        0.3f);
                 }
             }
             else
@@ -2238,27 +2334,27 @@ namespace DrillSnake
                     "Drive Gear",
                     parent,
                     _steelLightMaterial);
-                gear.transform.localPosition = new Vector3(0f, 0.19f, 0f);
-                gear.transform.localScale = new Vector3(0.22f, 0.055f, 0.22f);
+                gear.transform.localPosition = new Vector3(0f, 0.285f, 0f);
+                gear.transform.localScale = new Vector3(0.2f, 0.05f, 0.2f);
             }
         }
 
         private void CreateTrack(Transform parent, float x)
         {
-            var track = CreatePrimitive(
-                PrimitiveType.Cube,
+            var track = CreateMeshObject(
                 x < 0f ? "Left Track" : "Right Track",
                 parent,
+                GetBeveledCubeMesh(),
                 _rubberMaterial);
             track.transform.localPosition = new Vector3(x, -0.08f, -0.02f);
             track.transform.localScale = new Vector3(0.18f, 0.22f, 0.76f);
 
             for (var i = -1; i <= 1; i++)
             {
-                var tread = CreatePrimitive(
-                    PrimitiveType.Cube,
+                var tread = CreateMeshObject(
                     "Track Tread",
                     parent,
+                    GetBeveledCubeMesh(),
                     _steelLightMaterial);
                 tread.transform.localPosition = new Vector3(
                     x,
@@ -2287,10 +2383,10 @@ namespace DrillSnake
                 var angle = (Hash01(cell, 71 + i) * 0.6f + i) *
                             Mathf.PI * 0.5f;
                 var radius = i == 0 ? 0f : 0.17f + Hash01(cell, 83 + i) * 0.1f;
-                var shard = CreatePrimitive(
-                    PrimitiveType.Cube,
+                var shard = CreateMeshObject(
                     $"Cel Ore Shard {i + 1}",
                     parent,
+                    GetCrystalMesh(),
                     oreMaterial);
                 shard.transform.localPosition = new Vector3(
                     Mathf.Cos(angle) * radius,
@@ -2304,9 +2400,9 @@ namespace DrillSnake
                     ? 0.58f
                     : 0.3f + Hash01(cell, 113 + i) * 0.2f;
                 shard.transform.localScale = new Vector3(
-                    i == 0 ? 0.24f : 0.18f,
-                    height,
-                    i == 0 ? 0.24f : 0.18f);
+                    i == 0 ? 0.59f : 0.43f,
+                    height * 1.1f,
+                    i == 0 ? 0.59f : 0.43f);
             }
         }
 
@@ -2403,22 +2499,25 @@ namespace DrillSnake
             root.transform.SetParent(parent, false);
             root.transform.localPosition = localPosition;
 
-            var outline = CreatePrimitive(
-                PrimitiveType.Cube,
-                "Ink Silhouette",
-                root.transform,
-                _outlineMaterial ?? _refineryDarkMaterial);
-            outline.transform.localPosition = new Vector3(0f, -outlineWidth, 0f);
-            outline.transform.localScale = localScale +
-                                           new Vector3(
-                                               outlineWidth * 2f,
-                                               outlineWidth,
-                                               outlineWidth * 2f);
+            if (outlineWidth > 0.001f)
+            {
+                var outline = CreateMeshObject(
+                    "Ink Silhouette",
+                    root.transform,
+                    GetBeveledCubeMesh(),
+                    _outlineMaterial ?? _refineryDarkMaterial);
+                outline.transform.localPosition = new Vector3(0f, -outlineWidth, 0f);
+                outline.transform.localScale = localScale +
+                                               new Vector3(
+                                                   outlineWidth * 2f,
+                                                   outlineWidth,
+                                                   outlineWidth * 2f);
+            }
 
-            var block = CreatePrimitive(
-                PrimitiveType.Cube,
+            var block = CreateMeshObject(
                 "Cel Surface",
                 root.transform,
+                GetBeveledCubeMesh(),
                 material);
             block.transform.localScale = localScale;
             return root;
@@ -2432,6 +2531,280 @@ namespace DrillSnake
                 DrillSnakeOreType.VeryRare => _veryRareOreMaterial,
                 _ => _commonOreMaterial
             };
+        }
+
+        private Mesh GetBeveledCubeMesh()
+        {
+            if (_beveledCubeMesh != null)
+            {
+                return _beveledCubeMesh;
+            }
+
+            const float half = 0.5f;
+            const float bevel = 0.085f;
+            const float inner = half - bevel;
+            var vertices = new List<Vector3>(132);
+            var normals = new List<Vector3>(132);
+            var triangles = new List<int>(198);
+            var faceNormals = new[]
+            {
+                Vector3.right,
+                Vector3.left,
+                Vector3.up,
+                Vector3.down,
+                Vector3.forward,
+                Vector3.back
+            };
+
+            foreach (var normal in faceNormals)
+            {
+                var tangent = Mathf.Abs(normal.y) > 0.9f
+                    ? Vector3.right
+                    : Vector3.Cross(Vector3.up, normal).normalized;
+                var bitangent = Vector3.Cross(normal, tangent).normalized;
+                var center = normal * half;
+                AddOrientedQuad(
+                    vertices,
+                    normals,
+                    triangles,
+                    center - tangent * inner - bitangent * inner,
+                    center + tangent * inner - bitangent * inner,
+                    center + tangent * inner + bitangent * inner,
+                    center - tangent * inner + bitangent * inner,
+                    normal);
+            }
+
+            var axes = new[]
+            {
+                Vector3.right,
+                Vector3.up,
+                Vector3.forward
+            };
+            for (var firstAxis = 0; firstAxis < 3; firstAxis++)
+            {
+                for (var secondAxis = firstAxis + 1;
+                     secondAxis < 3;
+                     secondAxis++)
+                {
+                    var remainingAxis = 3 - firstAxis - secondAxis;
+                    var edgeDirection = axes[remainingAxis];
+                    for (var firstSign = -1;
+                         firstSign <= 1;
+                         firstSign += 2)
+                    {
+                        for (var secondSign = -1;
+                             secondSign <= 1;
+                             secondSign += 2)
+                        {
+                            var firstNormal =
+                                axes[firstAxis] * firstSign;
+                            var secondNormal =
+                                axes[secondAxis] * secondSign;
+                            var edgeNormal =
+                                (firstNormal + secondNormal).normalized;
+                            var firstPlane =
+                                firstNormal * half +
+                                secondNormal * inner;
+                            var secondPlane =
+                                firstNormal * inner +
+                                secondNormal * half;
+                            AddOrientedQuad(
+                                vertices,
+                                normals,
+                                triangles,
+                                firstPlane - edgeDirection * inner,
+                                secondPlane - edgeDirection * inner,
+                                secondPlane + edgeDirection * inner,
+                                firstPlane + edgeDirection * inner,
+                                edgeNormal);
+                        }
+                    }
+                }
+            }
+
+            for (var xSign = -1; xSign <= 1; xSign += 2)
+            {
+                for (var ySign = -1; ySign <= 1; ySign += 2)
+                {
+                    for (var zSign = -1; zSign <= 1; zSign += 2)
+                    {
+                        var normal = new Vector3(
+                            xSign,
+                            ySign,
+                            zSign).normalized;
+                        AddOrientedTriangle(
+                            vertices,
+                            normals,
+                            triangles,
+                            new Vector3(
+                                xSign * half,
+                                ySign * inner,
+                                zSign * inner),
+                            new Vector3(
+                                xSign * inner,
+                                ySign * half,
+                                zSign * inner),
+                            new Vector3(
+                                xSign * inner,
+                                ySign * inner,
+                                zSign * half),
+                            normal);
+                    }
+                }
+            }
+
+            _beveledCubeMesh = new Mesh
+            {
+                name = "Procedural Beveled Block",
+                vertices = vertices.ToArray(),
+                normals = normals.ToArray(),
+                triangles = triangles.ToArray()
+            };
+            _beveledCubeMesh.RecalculateBounds();
+            return _beveledCubeMesh;
+        }
+
+        private Mesh GetCrystalMesh()
+        {
+            if (_crystalMesh != null)
+            {
+                return _crystalMesh;
+            }
+
+            const int sides = 6;
+            const float lowerRadius = 0.31f;
+            const float upperRadius = 0.25f;
+            var vertices = new List<Vector3>(sides * 14);
+            var normals = new List<Vector3>(sides * 14);
+            var triangles = new List<int>(sides * 15);
+            var bottomTip = new Vector3(0f, -0.5f, 0f);
+            var topTip = new Vector3(0f, 0.5f, 0f);
+            for (var side = 0; side < sides; side++)
+            {
+                var next = (side + 1) % sides;
+                var angle = Mathf.PI * 2f * side / sides;
+                var nextAngle = Mathf.PI * 2f * next / sides;
+                var middleAngle = (angle + nextAngle) * 0.5f;
+                if (next == 0)
+                {
+                    middleAngle = angle + Mathf.PI / sides;
+                }
+
+                var lower = new Vector3(
+                    Mathf.Cos(angle) * lowerRadius,
+                    -0.24f,
+                    Mathf.Sin(angle) * lowerRadius);
+                var nextLower = new Vector3(
+                    Mathf.Cos(nextAngle) * lowerRadius,
+                    -0.24f,
+                    Mathf.Sin(nextAngle) * lowerRadius);
+                var upper = new Vector3(
+                    Mathf.Cos(angle) * upperRadius,
+                    0.19f,
+                    Mathf.Sin(angle) * upperRadius);
+                var nextUpper = new Vector3(
+                    Mathf.Cos(nextAngle) * upperRadius,
+                    0.19f,
+                    Mathf.Sin(nextAngle) * upperRadius);
+                var radial = new Vector3(
+                    Mathf.Cos(middleAngle),
+                    0f,
+                    Mathf.Sin(middleAngle));
+
+                AddOrientedTriangle(
+                    vertices,
+                    normals,
+                    triangles,
+                    bottomTip,
+                    nextLower,
+                    lower,
+                    (radial + Vector3.down * 0.55f).normalized);
+                AddOrientedQuad(
+                    vertices,
+                    normals,
+                    triangles,
+                    lower,
+                    nextLower,
+                    nextUpper,
+                    upper,
+                    radial);
+                AddOrientedTriangle(
+                    vertices,
+                    normals,
+                    triangles,
+                    upper,
+                    nextUpper,
+                    topTip,
+                    (radial + Vector3.up * 0.72f).normalized);
+            }
+
+            _crystalMesh = new Mesh
+            {
+                name = "Procedural Faceted Crystal",
+                vertices = vertices.ToArray(),
+                normals = normals.ToArray(),
+                triangles = triangles.ToArray()
+            };
+            _crystalMesh.RecalculateBounds();
+            return _crystalMesh;
+        }
+
+        private static void AddOrientedQuad(
+            List<Vector3> vertices,
+            List<Vector3> normals,
+            List<int> triangles,
+            Vector3 a,
+            Vector3 b,
+            Vector3 c,
+            Vector3 d,
+            Vector3 normal)
+        {
+            if (Vector3.Dot(Vector3.Cross(b - a, c - a), normal) < 0f)
+            {
+                (b, d) = (d, b);
+            }
+
+            var start = vertices.Count;
+            vertices.Add(a);
+            vertices.Add(b);
+            vertices.Add(c);
+            vertices.Add(d);
+            normals.Add(normal);
+            normals.Add(normal);
+            normals.Add(normal);
+            normals.Add(normal);
+            triangles.Add(start);
+            triangles.Add(start + 1);
+            triangles.Add(start + 2);
+            triangles.Add(start);
+            triangles.Add(start + 2);
+            triangles.Add(start + 3);
+        }
+
+        private static void AddOrientedTriangle(
+            List<Vector3> vertices,
+            List<Vector3> normals,
+            List<int> triangles,
+            Vector3 a,
+            Vector3 b,
+            Vector3 c,
+            Vector3 normal)
+        {
+            if (Vector3.Dot(Vector3.Cross(b - a, c - a), normal) < 0f)
+            {
+                (b, c) = (c, b);
+            }
+
+            var start = vertices.Count;
+            vertices.Add(a);
+            vertices.Add(b);
+            vertices.Add(c);
+            normals.Add(normal);
+            normals.Add(normal);
+            normals.Add(normal);
+            triangles.Add(start);
+            triangles.Add(start + 1);
+            triangles.Add(start + 2);
         }
 
         private Mesh GetDrillConeMesh()
@@ -2654,7 +3027,8 @@ namespace DrillSnake
             Color accentColor,
             float patternScale,
             float patternStrength,
-            Color? emission = null)
+            Color? emission = null,
+            float stoneSurface = 0f)
         {
             var shader = Resources.Load<Shader>(
                 "Shaders/DrillSnakeProceduralCel");
@@ -2683,6 +3057,7 @@ namespace DrillSnake
             material.SetColor("_AccentColor", accentColor);
             material.SetFloat("_PatternScale", patternScale);
             material.SetFloat("_PatternStrength", patternStrength);
+            material.SetFloat("_StoneSurface", stoneSurface);
             material.SetColor(
                 "_EmissionColor",
                 emission ?? Color.black);
@@ -2758,10 +3133,32 @@ namespace DrillSnake
         {
             if (_artMode == DrillSnakeArtMode.ProceduralCel)
             {
-                return index == 0 ? 0.42f : 0.39f;
+                return 0.1f;
             }
 
             return index == 0 ? 0.82f : 0.78f;
+        }
+
+        private void OnDestroy()
+        {
+            ReleaseMaterials();
+            if (_beveledCubeMesh != null)
+            {
+                Destroy(_beveledCubeMesh);
+                _beveledCubeMesh = null;
+            }
+
+            if (_crystalMesh != null)
+            {
+                Destroy(_crystalMesh);
+                _crystalMesh = null;
+            }
+
+            if (_drillConeMesh != null)
+            {
+                Destroy(_drillConeMesh);
+                _drillConeMesh = null;
+            }
         }
 
         private static float HashAngle(Vector2Int cell)

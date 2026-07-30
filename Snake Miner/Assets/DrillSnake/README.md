@@ -262,14 +262,19 @@ This is the default presentation and does not sample any PNG art in the world.
 It is built entirely from generated meshes, Unity primitives, flat palettes, and
 `Assets/Resources/Shaders/DrillSnakeProceduralCel.shader`.
 
-- Three-step lighting bands create a clean cel-shaded read from the top-down
-  camera.
-- World-space hatching and deterministic color flecks provide light surface
-  texture without texture maps or random per-frame noise.
-- Ink silhouette blocks give rocks, machinery, and train modules a graphic dark
-  edge.
+- Three-step lighting bands, ambient probes, soft directional shadows, cool rim
+  light, and warm local lamps create the dimensional diorama lighting.
+- Multi-octave world-space stone mottling, mineral breakup, hatching, and
+  deterministic color flecks provide surface texture without texture maps or
+  random per-frame noise.
+- Generated chamfered meshes give rock tiles, refinery plates, machinery, and
+  train modules broad edge highlights instead of perfectly sharp cube
+  silhouettes.
+- Rock height, top chips, and navigable-floor debris vary deterministically by
+  cell while preserving the exact collision grid.
 - Soft sandstone and permanent blue basalt remain immediately distinguishable.
-- Orange, cobalt, and magenta emissive crystal clusters communicate ore value.
+- Generated pointed crystal meshes and orange, cobalt, and magenta emission
+  communicate ore value.
 - The snake is a generated low-poly machine: faceted drill cone, gunmetal body,
   orange collar, automatic turret, tracks, couplers, drive gears, and visible
   cargo crystals.
